@@ -8,11 +8,13 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+// Inclui as credenciais de um arquivo externo (não versionado)
+#include "secrets.h" //comente essa linha e altere as linhas de baixo 
 // ============ CONFIGURAÇÃO DO FIREBASE (SUBSTITUA PELOS SEUS DADOS) ============
-#define API_KEY       "AIzaSyCORs2eW8qDTYe6SBA8o65nMoRVMAzhYXQ"           // Ex: "AIzaSyA..."
-#define DATABASE_URL  "https://nivelbudo-default-rtdb.firebaseio.com/"  // Ex: "https://niveltec-default-rtdb.firebaseio.com"
-#define USER_EMAIL    "teste@joaobatista.eng.br" // Email cadastrado no Firebase Auth
-#define USER_PASSWORD "teste123456"             // Senha do usuário
+/*#define API_KEY      "AIzaSyA..."
+#define DATABASE_URL   "https://niveltec-default-rtdb.firebaseio.com"
+#define USER_EMAIL    Email@cadastrado_no_Firebase_Auth
+#define USER_PASSWORD "123456"             // Senha do usuário/*
 // ===============================================================================
 
 // Funções principais
