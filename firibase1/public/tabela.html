@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NivelTec - Tabela e Gráficos</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- Biblioteca Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Biblioteca para exportar CSV (PapaParse) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #14532d, #1e3a8a);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <div class="container mx-auto px-4 py-8 flex-grow">
+    <!-- Cabeçalho -->
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-white">NivelTec</h1>
+        <p class="text-white/80 text-sm">Histórico de medições e gráficos</p>
+      </div>
+      <div class="flex space-x-3">
+        <button id="refreshBtn" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition">
+          <i class="fas fa-sync-alt mr-2"></i> Atualizar
+        </button>
+        <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition">
+          <i class="fas fa-sign-out-alt mr-2"></i> Sair
+        </button>
+      </div>
+    </div>
+
+    <!-- Informações do dispositivo -->
+    <div class="card p-5 mb-6">
+      <div class="flex flex-wrap justify-between items-center">
+        <div>
+          <h2 id="deviceName" class="text-xl font-bold text-gray-800">Carregando...</h2>
+          <p id="deviceIdDisplay" class="text-gray-500 text-sm"></p>
+        </div>
+        <div class="flex space-x-3">
+          <a id="dashboardLink" href="#" class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition">
+            <i class="fas fa-chart-line mr-1"></i> Dashboard
+          </a>
+          <a href="dispositivos.html" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition">
+            <i class="fas fa-list mr-1"></i> Meus Dispositivos
+          </a>
+          <a id="configLink" href="#" class="bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition">
+            <i class="fas fa-cog mr-1"></i> Configurações
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card do Gráfico -->
+    <div class="card p-5 mb-6">
+      <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+        <i class="fas fa-chart-line text-blue-600 mr-2"></i> Evolução do Nível
+      </h3>
+      <div class="chart-container" style="position: relative; height: 350px;">
+        <canvas id="nivelChart"></canvas>
+      </div>
+      <div class="text-xs text-gray-500 text-center mt-2">
+        Dados em milímetros (mm) – eixo X com timestamps UTC
+      </div>
+    </div>
+
+    <!-- Card da Tabela -->
+    <div class="card p-5">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
+        <h3 class="text-xl font-semibold text-gray-800">Medições registradas</h3>
+        <button id="exportCsvBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+          <i class="fas fa-download mr-2"></i> Exportar CSV
+        </button>
+      </div>
+      <div class="overflow-x-auto max-h-96">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50 sticky top-0">
+             <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data/Hora (UTC)</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sensor 1 (mm)</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sensor 2 (mm)</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Média (mm)</th>
+             </tr>
+          </thead>
+          <tbody id="tabelaBody" class="bg-white divide-y divide-gray-200">
+            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Carregando dados...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="text-center text-white/60 text-sm mt-8">
+      <p>NivelTec &copy; 2026 - Monitoramento inteligente de nível de água</p>
+    </footer>
+  </div>
+
+  <script>
+    // Configuração do Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyCORs2eW8qDTYe6SBA8o65nMoRVMAzhYXQ",
+      authDomain: "nivelbudo.firebaseapp.com",
+      databaseURL: "https://nivelbudo-default-rtdb.firebaseio.com",
+      projectId: "nivelbudo",
+      storageBucket: "nivelbudo.firebasestorage.app",
+      messagingSenderId: "817262285222",
+      appId: "1:817262285222:web:cabeeb3fe6d9602084bf67",
+      measurementId: "G-CD9WYSNR88"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    let currentUser = null;
+    let deviceId = null;
+    let medicoesRef = null;
+    let nivelChart = null;
+
+    // Elementos DOM
+    const deviceNameSpan = document.getElementById('deviceName');
+    const deviceIdDisplay = document.getElementById('deviceIdDisplay');
+    const tabelaBody = document.getElementById('tabelaBody');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const dashboardLink = document.getElementById('dashboardLink');
+    const configLink = document.getElementById('configLink');
+    const canvas = document.getElementById('nivelChart');
+
+    // Função para formatar timestamp Unix (segundos) em UTC com formato pt-BR
+    function formatTimestamp(timestamp) {
+      if (!timestamp) return '--';
+      const date = new Date(timestamp * 1000);
+      if (isNaN(date.getTime())) return 'Inválido';
+      return date.toLocaleString('pt-BR', { timeZone: 'UTC' });
+    }
+
+    // Atualiza a tabela e o gráfico com os dados recebidos
+    function updateUI(data) {
+      if (!data || typeof data !== 'object') {
+        tabelaBody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Nenhuma medição encontrada</td></tr>';
+        if (nivelChart) nivelChart.destroy();
+        return;
+      }
+
+      const timestamps = Object.keys(data).sort((a,b) => Number(b) - Number(a)); // decrescente para tabela
+      if (timestamps.length === 0) {
+        tabelaBody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Nenhuma medição encontrada</td></tr>';
+        if (nivelChart) nivelChart.destroy();
+        return;
+      }
+
+      // --- Tabela (ordem decrescente) ---
+      let html = '';
+      for (const ts of timestamps) {
+        const med = data[ts];
+        const dataHora = formatTimestamp(Number(ts));
+        const s1 = med.sensor1_dist !== undefined ? med.sensor1_dist : '--';
+        const s2 = med.sensor2_dist !== undefined ? med.sensor2_dist : '--';
+        const media = med.media !== undefined ? med.media : '--';
+        html += `
+          <tr>
+            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${dataHora}</td>
+            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${s1}</td>
+            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${s2}</td>
+            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700 font-medium">${media}</td>
+          </tr>
+        `;
+      }
+      tabelaBody.innerHTML = html;
+
+      // --- Gráfico (ordem crescente para eixo X) ---
+      const labels = timestamps.reverse().map(ts => formatTimestamp(Number(ts)));
+      const sensor1Data = timestamps.map(ts => data[ts].sensor1_dist ?? null);
+      const sensor2Data = timestamps.map(ts => data[ts].sensor2_dist ?? null);
+      const mediaData = timestamps.map(ts => data[ts].media ?? null);
+
+      if (nivelChart) nivelChart.destroy();
+      const ctx = canvas.getContext('2d');
+      nivelChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Sensor 1 (mm)',
+              data: sensor1Data,
+              borderColor: 'rgb(59, 130, 246)',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              tension: 0.2,
+              fill: false,
+              pointRadius: 2,
+              pointHoverRadius: 5
+            },
+            {
+              label: 'Sensor 2 (mm)',
+              data: sensor2Data,
+              borderColor: 'rgb(16, 185, 129)',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              tension: 0.2,
+              fill: false,
+              pointRadius: 2,
+              pointHoverRadius: 5
+            },
+            {
+              label: 'Média (mm)',
+              data: mediaData,
+              borderColor: 'rgb(239, 68, 68)',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              tension: 0.2,
+              fill: false,
+              borderWidth: 2,
+              pointRadius: 2,
+              pointHoverRadius: 5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.raw} mm`;
+                }
+              }
+            },
+            legend: {
+              position: 'top',
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                maxRotation: 45,
+                minRotation: 45,
+                autoSkip: true,
+                maxTicksLimit: 10
+              },
+              title: {
+                display: true,
+                text: 'Data/Hora (UTC)'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Distância (mm)'
+              },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // Configurar listener em tempo real
+    function setupListener() {
+      if (medicoesRef) medicoesRef.off();
+      if (!deviceId) return;
+
+      medicoesRef = database.ref(`dispositivos/${deviceId}/medicoes`);
+      medicoesRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        updateUI(data);
+      });
+    }
+
+    // Carregar apelido do dispositivo
+    function loadDeviceInfo(uid, deviceId) {
+      database.ref(`users/${uid}/dispositivos/${deviceId}/apelido`).once('value')
+        .then(snapshot => {
+          const nickname = snapshot.val();
+          deviceNameSpan.textContent = nickname ? nickname : deviceId;
+        })
+        .catch(err => console.error('Erro ao carregar apelido:', err));
+      deviceIdDisplay.textContent = `ID: ${deviceId}`;
+    }
+
+    // Verificar acesso do usuário
+    function checkDeviceAccess(uid, deviceId) {
+      return database.ref(`users/${uid}/dispositivos/${deviceId}`).once('value')
+        .then(snapshot => {
+          if (snapshot.exists()) {
+            loadDeviceInfo(uid, deviceId);
+            setupListener();
+            return true;
+          } else {
+            alert('Você não tem acesso a este dispositivo. Redirecionando...');
+            window.location.href = 'dispositivos.html';
+            return false;
+          }
+        });
+    }
+
+    // Exportar CSV
+    function exportToCSV() {
+      database.ref(`dispositivos/${deviceId}/medicoes`).once('value')
+        .then(snapshot => {
+          const data = snapshot.val();
+          if (!data) {
+            alert('Nenhum dado disponível para exportar.');
+            return;
+          }
+          const timestamps = Object.keys(data).sort((a,b) => Number(b) - Number(a));
+          const rows = [['Data/Hora (UTC)', 'Sensor 1 (mm)', 'Sensor 2 (mm)', 'Média (mm)']];
+          for (const ts of timestamps) {
+            const med = data[ts];
+            rows.push([
+              formatTimestamp(Number(ts)),
+              med.sensor1_dist ?? '--',
+              med.sensor2_dist ?? '--',
+              med.media ?? '--'
+            ]);
+          }
+          const csv = Papa.unparse(rows, { delimiter: ';' });
+          const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          link.href = url;
+          link.setAttribute('download', `medicoes_${deviceId}_${new Date().toISOString().slice(0,19)}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        })
+        .catch(err => alert('Erro ao exportar dados.'));
+    }
+
+    // Autenticação e inicialização
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      currentUser = user;
+      const urlParams = new URLSearchParams(window.location.search);
+      deviceId = urlParams.get('device');
+      if (!deviceId) {
+        alert('Nenhum dispositivo selecionado. Redirecionando...');
+        window.location.href = 'dispositivos.html';
+        return;
+      }
+      checkDeviceAccess(currentUser.uid, deviceId).then(hasAccess => {
+        if (hasAccess) {
+          dashboardLink.href = `index.html?device=${deviceId}`;
+          configLink.href = `configuracoes.html?device=${deviceId}`;
+        }
+      });
+    });
+
+    // Eventos
+    refreshBtn.addEventListener('click', () => {
+      if (medicoesRef) medicoesRef.once('value', snapshot => updateUI(snapshot.val()));
+    });
+    logoutBtn.addEventListener('click', () => auth.signOut().then(() => window.location.href = 'login.html'));
+    exportCsvBtn.addEventListener('click', exportToCSV);
+  </script>
+</body>
+</html>

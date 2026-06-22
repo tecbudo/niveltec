@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NivelTec - Adicionar Dispositivo</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- Biblioteca jsQR para leitura de QR Code -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #14532d, #1e3a8a);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1rem;
+      box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s;
+    }
+    /* Modal da câmera */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 50;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 1rem;
+      width: 90%;
+      max-width: 500px;
+      text-align: center;
+    }
+    #camera-container {
+      position: relative;
+      width: 100%;
+      height: 300px;
+      overflow: hidden;
+      margin: 15px 0;
+      border-radius: 8px;
+      background-color: #f0f0f0;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #scan-region {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 70%;
+      height: 70%;
+      border: 3px solid #2ecc71;
+      border-radius: 8px;
+      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.3);
+      pointer-events: none;
+    }
+    .device-code-input {
+      font-family: monospace;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="card p-8 w-full max-w-md">
+    <div class="text-center mb-6">
+      <h1 class="text-3xl font-bold text-gray-800">Adicionar Dispositivo</h1>
+      <p class="text-gray-500 mt-1">Cadastre um novo dispositivo</p>
+      <div class="mt-2 text-xs text-gray-400 bg-gray-100 p-2 rounded-lg inline-block">
+        <i class="fas fa-info-circle mr-1"></i> Código com 9 caracteres hex (ex: A1B2C3D4E)
+      </div>
+    </div>
+
+    <div id="message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-gray-700 font-medium mb-1">Código do dispositivo</label>
+        <div class="flex">
+          <input type="text" id="deviceCode" maxlength="9" placeholder="Ex: A1B2C3D4E" 
+                 class="device-code-input flex-grow p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-green-500 uppercase">
+          <button id="scanQrBtn" class="bg-green-600 text-white px-4 rounded-r-lg hover:bg-green-700 transition">
+            <i class="fas fa-qrcode"></i>
+          </button>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Código de 9 caracteres (0-9, A-F). Ex: A1B2C3D4E</p>
+      </div>
+
+      <div>
+        <label class="block text-gray-700 font-medium mb-1">Apelido (opcional)</label>
+        <input type="text" id="deviceName" placeholder="Ex: Tanque Norte" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+      </div>
+    </div>
+
+    <button id="addDeviceBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 mt-6 rounded-lg transition duration-300">
+      <i class="fas fa-plus-circle mr-2"></i> Adicionar Dispositivo
+    </button>
+
+    <p class="text-center text-gray-500 mt-6 text-sm">
+      <a href="dispositivos.html" class="text-green-600 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Voltar para meus dispositivos</a>
+    </p>
+  </div>
+
+  <!-- Modal para leitura de QR Code -->
+  <div id="cameraModal" class="modal">
+    <div class="modal-content">
+      <h3 class="text-xl font-semibold text-gray-800 mb-2">Ler QR Code</h3>
+      <p class="text-gray-600 mb-4">Aponte a câmera para o código do dispositivo</p>
+      <div id="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="scan-region"></div>
+      </div>
+      <div class="flex justify-center">
+        <button id="closeCameraBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== CONFIGURAÇÃO DO FIREBASE ====================
+    // SUBSTITUA PELOS DADOS DO SEU PROJETO
+   const firebaseConfig = {
+  apiKey: "AIzaSyCORs2eW8qDTYe6SBA8o65nMoRVMAzhYXQ",
+  authDomain: "nivelbudo.firebaseapp.com",
+  databaseURL: "https://nivelbudo-default-rtdb.firebaseio.com",
+  projectId: "nivelbudo",
+  storageBucket: "nivelbudo.firebasestorage.app",
+  messagingSenderId: "817262285222",
+  appId: "1:817262285222:web:cabeeb3fe6d9602084bf67",
+  measurementId: "G-CD9WYSNR88"
+};
+
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // Elementos DOM
+    const deviceCodeInput = document.getElementById('deviceCode');
+    const deviceNameInput = document.getElementById('deviceName');
+    const addBtn = document.getElementById('addDeviceBtn');
+    const messageDiv = document.getElementById('message');
+    const scanQrBtn = document.getElementById('scanQrBtn');
+    const cameraModal = document.getElementById('cameraModal');
+    const closeCameraBtn = document.getElementById('closeCameraBtn');
+    const video = document.getElementById('video');
+
+    let stream = null;
+    let scanningInterval = null;
+
+    // ==================== FUNÇÃO DE VALIDAÇÃO DO DEVICE ID (CRC-32 + PARIDADE) ====================
+    function validateDeviceId(deviceId) {
+      if (!deviceId || deviceId.length !== 9) return false;
+      // Verifica se são apenas caracteres hex (0-9, A-F)
+      const hexRegex = /^[0-9A-F]{9}$/i;
+      if (!hexRegex.test(deviceId)) return false;
+
+      const crcPart = deviceId.substring(0, 8);
+      const parityGiven = deviceId.charAt(8).toUpperCase();
+      // Converte o CRC (hex) para número de 32 bits
+      const crc32 = parseInt(crcPart, 16);
+      if (isNaN(crc32)) return false;
+      // Calcula a paridade: XOR dos 4 bytes do CRC
+      const b1 = (crc32 & 0xFF);
+      const b2 = (crc32 >> 8) & 0xFF;
+      const b3 = (crc32 >> 16) & 0xFF;
+      const b4 = (crc32 >> 24) & 0xFF;
+      const parityCalc = (b1 ^ b2 ^ b3 ^ b4) & 0x0F;
+      const parityCalcHex = parityCalc.toString(16).toUpperCase();
+      return parityGiven === parityCalcHex;
+    }
+
+    // ==================== FUNÇÃO DE ADIÇÃO AO FIREBASE ====================
+    async function addDevice(deviceCode, nickname) {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Usuário não autenticado');
+      deviceCode = deviceCode.trim().toUpperCase();
+      if (!validateDeviceId(deviceCode)) {
+        throw new Error('Código inválido. Deve ter 9 caracteres hex com paridade correta.');
+      }
+
+      // Verificar se já está na lista do usuário
+      const userDeviceRef = database.ref(`users/${user.uid}/dispositivos/${deviceCode}`);
+      const snapshot = await userDeviceRef.once('value');
+      if (snapshot.exists()) {
+        throw new Error('Este dispositivo já está cadastrado para você.');
+      }
+
+      // Cadastrar na lista do usuário
+      const deviceData = {
+        apelido: nickname && nickname.trim() ? nickname.trim() : `Dispositivo ${deviceCode}`,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+      };
+      await userDeviceRef.set(deviceData);
+
+      // Verificar se o nó global do dispositivo existe; se não, criá-lo
+      const globalDeviceRef = database.ref(`devices/${deviceCode}`);
+      const globalSnapshot = await globalDeviceRef.once('value');
+      if (!globalSnapshot.exists()) {
+        await globalDeviceRef.set({
+          estado: "disponivel",
+          timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+      }
+    }
+
+    // ==================== MENSAGENS ====================
+    function showMessage(text, isError = false) {
+      messageDiv.textContent = text;
+      messageDiv.classList.remove('hidden', 'bg-green-200', 'text-green-800', 'bg-red-200', 'text-red-800');
+      if (isError) {
+        messageDiv.classList.add('bg-red-200', 'text-red-800');
+      } else {
+        messageDiv.classList.add('bg-green-200', 'text-green-800');
+      }
+      setTimeout(() => {
+        messageDiv.classList.add('hidden');
+      }, 5000);
+    }
+
+    // ==================== EVENTO DE ADICIONAR ====================
+    addBtn.addEventListener('click', async () => {
+      const deviceCode = deviceCodeInput.value.trim();
+      const nickname = deviceNameInput.value.trim();
+      addBtn.disabled = true;
+      addBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Adicionando...';
+      try {
+        await addDevice(deviceCode, nickname);
+        showMessage('Dispositivo adicionado com sucesso! Redirecionando...');
+        setTimeout(() => {
+          window.location.href = 'dispositivos.html';
+        }, 1500);
+      } catch (err) {
+        console.error(err);
+        showMessage(err.message, true);
+        addBtn.disabled = false;
+        addBtn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i> Adicionar Dispositivo';
+      }
+    });
+
+    // ==================== SCANNER DE QR CODE ====================
+    function openCameraModal() {
+      cameraModal.style.display = 'flex';
+      startCamera();
+    }
+
+    function closeCameraModal() {
+      cameraModal.style.display = 'none';
+      stopCamera();
+    }
+
+    function startCamera() {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then(mediaStream => {
+            stream = mediaStream;
+            video.srcObject = mediaStream;
+            scanningInterval = setInterval(scanVideoFrame, 500);
+          })
+          .catch(error => {
+            console.error('Erro ao acessar a câmera:', error);
+            showMessage('Não foi possível acessar a câmera. Verifique as permissões.', true);
+            closeCameraModal();
+          });
+      } else {
+        showMessage('Seu navegador não suporta acesso à câmera.', true);
+        closeCameraModal();
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      if (scanningInterval) {
+        clearInterval(scanningInterval);
+        scanningInterval = null;
+      }
+    }
+
+    function scanVideoFrame() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'dontInvert',
+        });
+        if (code) {
+          let raw = code.data;
+          let deviceCode = raw;
+          // Tentar extrair código do dispositivo se for URL com parâmetro device
+          if (raw.includes('?device=')) {
+            try {
+              const url = new URL(raw);
+              deviceCode = url.searchParams.get('device');
+            } catch (e) {
+              // Não é URL válida, mantém texto original
+            }
+          }
+          // Limpar caracteres não alfanuméricos e deixar maiúsculo
+          deviceCode = deviceCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+          // Validar formato (9 caracteres hex com paridade)
+          if (deviceCode.length === 9 && validateDeviceId(deviceCode)) {
+            deviceCodeInput.value = deviceCode;
+            closeCameraModal();
+            showMessage(`Código lido: ${deviceCode}`, false);
+          } else {
+            showMessage('QR Code não contém um código válido (9 caracteres hex com paridade).', true);
+          }
+        }
+      }
+    }
+
+    scanQrBtn.addEventListener('click', openCameraModal);
+    closeCameraBtn.addEventListener('click', closeCameraModal);
+    cameraModal.addEventListener('click', (e) => {
+      if (e.target === cameraModal) closeCameraModal();
+    });
+
+    // ==================== AUTENTICAÇÃO ====================
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        window.location.href = 'login.html';
+      }
+    });
+
+    // ==================== MÁSCARA PARA O CAMPO DE CÓDIGO ====================
+    deviceCodeInput.addEventListener('input', function(e) {
+      let val = this.value.toUpperCase().replace(/[^0-9A-F]/g, '');
+      if (val.length > 9) val = val.slice(0, 9);
+      this.value = val;
+    });
+  </script>
+</body>
+</html>

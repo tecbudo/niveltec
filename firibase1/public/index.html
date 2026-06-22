@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NivelTec - Monitor de Nível</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #14532d, #1e3a8a);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+    }
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .status-ativo { background-color: #10b981; color: white; }
+    .status-inativo { background-color: #6b7280; color: white; }
+    .status-erro { background-color: #ef4444; color: white; }
+    .btn-green {
+      background-color: #10b981;
+      transition: background-color 0.2s;
+    }
+    .btn-green:hover {
+      background-color: #059669;
+    }
+    .btn-blue {
+      background-color: #2563eb;
+    }
+    .btn-blue:hover {
+      background-color: #1d4ed8;
+    }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body class="flex flex-col min-h-screen">
+  <div class="container mx-auto px-4 py-8 flex-grow">
+    <!-- Cabeçalho -->
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <div class="flex items-center space-x-4">
+        <h1 class="text-3xl font-bold text-white">NivelTec</h1>
+        <span class="text-white/80 text-sm hidden md:inline">Monitoramento de nível de água</span>
+      </div>
+      <div class="flex space-x-3">
+        <button id="refreshBtn" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition">
+          <i class="fas fa-sync-alt mr-2"></i> Atualizar
+        </button>
+        <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition">
+          <i class="fas fa-sign-out-alt mr-2"></i> Sair
+        </button>
+      </div>
+    </div>
+
+    <!-- Título do dispositivo e status -->
+    <div class="mb-6">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 id="deviceName" class="text-2xl font-bold text-white">Carregando dispositivo...</h2>
+          <p id="deviceIdDisplay" class="text-white/70 text-sm mt-1"></p>
+        </div>
+        <div id="statusBadge" class="badge-status status-ativo hidden">
+          <i class="fas fa-circle mr-1 text-xs"></i> Ativo
+        </div>
+      </div>
+    </div>
+
+    <!-- Cards de leituras principais -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <!-- Sensor 1 -->
+      <div class="card p-5 text-center">
+        <div class="text-gray-500 text-sm mb-2">Sensor 1 (mm)</div>
+        <div id="sensor1Value" class="text-4xl font-bold text-gray-800">--</div>
+        <div class="text-xs text-gray-400 mt-2">Distância medida</div>
+      </div>
+      <!-- Sensor 2 -->
+      <div class="card p-5 text-center">
+        <div class="text-gray-500 text-sm mb-2">Sensor 2 (mm)</div>
+        <div id="sensor2Value" class="text-4xl font-bold text-gray-800">--</div>
+        <div class="text-xs text-gray-400 mt-2">Distância medida</div>
+      </div>
+      <!-- Nível médio -->
+      <div class="card p-5 text-center bg-gradient-to-br from-green-50 to-blue-50 border-2 border-green-200">
+        <div class="text-gray-600 text-sm mb-2">Nível médio</div>
+        <div id="mediaValue" class="text-5xl font-bold text-green-700">--</div>
+        <div class="text-xs text-gray-500 mt-2">mm</div>
+      </div>
+    </div>
+
+    <!-- Última atualização e informações do dispositivo -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div class="card p-5">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3">
+          <i class="fas fa-clock text-green-600 mr-2"></i> Última atualização
+        </h3>
+        <div id="lastUpdate" class="text-2xl font-bold text-gray-700">Aguardando dados...</div>
+        <div class="text-xs text-gray-400 mt-2">Horário UTC (mesmo do banco)</div>
+      </div>
+      <div class="card p-5">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3"><i class="fas fa-microchip text-blue-600 mr-2"></i> Informações do dispositivo</h3>
+        <div class="space-y-2 text-sm">
+          <div><span class="font-medium text-gray-700">MAC:</span> <span id="deviceMac">--</span></div>
+          <div><span class="font-medium text-gray-700">IP:</span> <span id="deviceIp">--</span></div>
+          <div><span class="font-medium text-gray-700">Versão Firmware:</span> <span id="firmwareVersion">--</span></div>
+          <div><span class="font-medium text-gray-700">Primeira inicialização:</span> <span id="firstBoot">--</span></div>
+          <div><span class="font-medium text-gray-700">Última inicialização:</span> <span id="lastBoot">--</span></div>
+          <div><span class="font-medium text-gray-700">Contador de boots:</span> <span id="bootCount">--</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navegação -->
+    <div class="flex flex-wrap justify-center gap-4">
+      <a id="tabelaLink" href="#" class="bg-white hover:bg-gray-100 text-blue-700 font-semibold py-3 px-6 rounded-lg shadow transition flex items-center">
+        <i class="fas fa-table mr-2"></i> Ver Tabela Completa
+      </a>
+      <a id="configLink" href="#" class="bg-white hover:bg-gray-100 text-green-700 font-semibold py-3 px-6 rounded-lg shadow transition flex items-center">
+        <i class="fas fa-cog mr-2"></i> Configurações
+      </a>
+      <a href="dispositivos.html" class="bg-white hover:bg-gray-100 text-gray-700 font-semibold py-3 px-6 rounded-lg shadow transition flex items-center">
+        <i class="fas fa-list mr-2"></i> Meus Dispositivos
+      </a>
+    </div>
+
+    <footer class="text-center text-white/60 text-sm mt-12">
+      <p>NivelTec &copy; 2026 - Monitoramento inteligente de nível de água</p>
+    </footer>
+  </div>
+
+  <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyCORs2eW8qDTYe6SBA8o65nMoRVMAzhYXQ",
+      authDomain: "nivelbudo.firebaseapp.com",
+      databaseURL: "https://nivelbudo-default-rtdb.firebaseio.com",
+      projectId: "nivelbudo",
+      storageBucket: "nivelbudo.firebasestorage.app",
+      messagingSenderId: "817262285222",
+      appId: "1:817262285222:web:cabeeb3fe6d9602084bf67",
+      measurementId: "G-CD9WYSNR88"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    let currentUser = null;
+    let deviceId = null;
+    let medicoesRef = null;
+    let infoRef = null;
+    let statusRef = null;
+
+    // DOM elements
+    const deviceNameSpan = document.getElementById('deviceName');
+    const deviceIdSpan = document.getElementById('deviceIdDisplay');
+    const statusBadge = document.getElementById('statusBadge');
+    const sensor1Span = document.getElementById('sensor1Value');
+    const sensor2Span = document.getElementById('sensor2Value');
+    const mediaSpan = document.getElementById('mediaValue');
+    const lastUpdateSpan = document.getElementById('lastUpdate');
+    const deviceMacSpan = document.getElementById('deviceMac');
+    const deviceIpSpan = document.getElementById('deviceIp');
+    const firmwareVersionSpan = document.getElementById('firmwareVersion');
+    const firstBootSpan = document.getElementById('firstBoot');
+    const lastBootSpan = document.getElementById('lastBoot');
+    const bootCountSpan = document.getElementById('bootCount');
+    const tabelaLink = document.getElementById('tabelaLink');
+    const configLink = document.getElementById('configLink');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    // Formata timestamp em português, mantendo UTC (sem deslocamento)
+    function formatTimestamp(timestamp) {
+      if (!timestamp || timestamp <= 0) return '--';
+      const date = new Date(timestamp * 1000); // converte para milissegundos
+      if (isNaN(date.getTime())) return '--';
+      // Exibe no formato pt-BR com timezone UTC (assim o horário exibido é o mesmo que está no banco)
+      return date.toLocaleString('pt-BR', { timeZone: 'UTC' });
+    }
+
+    // Atualiza os dados de medição
+    function updateUIWithData(snapshot) {
+      const data = snapshot.val();
+      if (data && typeof data === 'object') {
+        const timestamps = Object.keys(data).sort((a, b) => Number(b) - Number(a));
+        if (timestamps.length > 0) {
+          const lastKey = timestamps[0];
+          const last = data[lastKey];
+          const lastTime = Number(lastKey);
+          lastUpdateSpan.textContent = formatTimestamp(lastTime);
+          sensor1Span.textContent = last.sensor1_dist !== undefined ? last.sensor1_dist : '--';
+          sensor2Span.textContent = last.sensor2_dist !== undefined ? last.sensor2_dist : '--';
+          mediaSpan.textContent = last.media !== undefined ? last.media : '--';
+        } else {
+          sensor1Span.textContent = '--';
+          sensor2Span.textContent = '--';
+          mediaSpan.textContent = '--';
+          lastUpdateSpan.textContent = 'Nenhuma medição ainda';
+        }
+      } else {
+        sensor1Span.textContent = '--';
+        sensor2Span.textContent = '--';
+        mediaSpan.textContent = '--';
+        lastUpdateSpan.textContent = 'Nenhuma medição ainda';
+      }
+    }
+
+    // Atualiza informações do dispositivo
+    function updateDeviceInfo(snapshot) {
+      const info = snapshot.val();
+      if (info) {
+        deviceMacSpan.textContent = info.mac || '--';
+        deviceIpSpan.textContent = info.ip || '--';
+        firmwareVersionSpan.textContent = info.firmwareVersion || '--';
+        firstBootSpan.textContent = formatTimestamp(info.firstBoot);
+        lastBootSpan.textContent = formatTimestamp(info.lastBoot);
+        bootCountSpan.textContent = info.bootCount !== undefined ? info.bootCount : '--';
+      } else {
+        deviceMacSpan.textContent = '--';
+        deviceIpSpan.textContent = '--';
+        firmwareVersionSpan.textContent = '--';
+        firstBootSpan.textContent = '--';
+        lastBootSpan.textContent = '--';
+        bootCountSpan.textContent = '--';
+      }
+    }
+
+    // Atualiza status
+    function updateStatus(snapshot) {
+      const estado = snapshot.val();
+      if (estado === 'ativo') {
+        statusBadge.className = 'badge-status status-ativo';
+        statusBadge.innerHTML = '<i class="fas fa-circle mr-1 text-xs"></i> Ativo';
+        statusBadge.classList.remove('hidden');
+      } else if (estado === 'inativo') {
+        statusBadge.className = 'badge-status status-inativo';
+        statusBadge.innerHTML = '<i class="fas fa-circle mr-1 text-xs"></i> Inativo';
+        statusBadge.classList.remove('hidden');
+      } else if (estado === 'erro') {
+        statusBadge.className = 'badge-status status-erro';
+        statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle mr-1 text-xs"></i> Erro';
+        statusBadge.classList.remove('hidden');
+      } else {
+        statusBadge.classList.add('hidden');
+      }
+    }
+
+    // Carrega apelido do dispositivo
+    function loadDeviceNickname(uid, deviceId) {
+      database.ref(`users/${uid}/dispositivos/${deviceId}/apelido`).once('value')
+        .then(snapshot => {
+          const nickname = snapshot.val();
+          deviceNameSpan.textContent = nickname ? nickname : deviceId;
+        })
+        .catch(err => console.error('Erro ao carregar apelido:', err));
+    }
+
+    // Configura listeners em tempo real
+    function setupListeners() {
+      if (!deviceId) return;
+
+      if (medicoesRef) medicoesRef.off();
+      if (infoRef) infoRef.off();
+      if (statusRef) statusRef.off();
+
+      medicoesRef = database.ref(`dispositivos/${deviceId}/medicoes`);
+      medicoesRef.on('value', updateUIWithData);
+
+      infoRef = database.ref(`dispositivos/${deviceId}/info`);
+      infoRef.on('value', updateDeviceInfo);
+
+      statusRef = database.ref(`dispositivos/${deviceId}/estado`);
+      statusRef.on('value', updateStatus);
+    }
+
+    // Verifica permissão do usuário
+    function checkDeviceAccess(uid, deviceId) {
+      return database.ref(`users/${uid}/dispositivos/${deviceId}`).once('value')
+        .then(snapshot => {
+          if (snapshot.exists()) {
+            deviceIdSpan.textContent = `ID: ${deviceId}`;
+            loadDeviceNickname(uid, deviceId);
+            setupListeners();
+            return true;
+          } else {
+            console.warn('Usuário sem permissão');
+            alert('Você não tem acesso a este dispositivo. Redirecionando...');
+            window.location.href = 'dispositivos.html';
+            return false;
+          }
+        });
+    }
+
+    // Autenticação
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      currentUser = user;
+      const urlParams = new URLSearchParams(window.location.search);
+      deviceId = urlParams.get('device');
+      if (!deviceId) {
+        alert('Nenhum dispositivo selecionado. Redirecionando...');
+        window.location.href = 'dispositivos.html';
+        return;
+      }
+      checkDeviceAccess(currentUser.uid, deviceId).then(hasAccess => {
+        if (hasAccess) {
+          tabelaLink.href = `tabela.html?device=${deviceId}`;
+          configLink.href = `configuracoes.html?device=${deviceId}`;
+        }
+      });
+    });
+
+    refreshBtn.addEventListener('click', () => {
+      if (medicoesRef) medicoesRef.once('value', updateUIWithData);
+      if (infoRef) infoRef.once('value', updateDeviceInfo);
+      if (statusRef) statusRef.once('value', updateStatus);
+    });
+
+    logoutBtn.addEventListener('click', () => {
+      auth.signOut().then(() => window.location.href = 'login.html');
+    });
+  </script>
+</body>
+</html>

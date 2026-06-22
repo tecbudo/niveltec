@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NivelTec - Configurações do Dispositivo</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #14532d, #1e3a8a);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s;
+    }
+    .info-card {
+      background-color: #f0fdf4;
+      border-left: 4px solid #10b981;
+    }
+    .btn-primary {
+      background-color: #2563eb;
+    }
+    .btn-primary:hover {
+      background-color: #1d4ed8;
+    }
+    .btn-disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body class="flex flex-col min-h-screen">
+  <div class="container mx-auto px-4 py-8 flex-grow">
+    <div class="card p-6">
+      <!-- Cabeçalho -->
+      <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Configurações do Dispositivo</h1>
+          <p id="deviceIdDisplay" class="text-gray-500 text-sm mt-1"></p>
+        </div>
+        <div class="flex space-x-3">
+          <a id="backToDashboard" href="#" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+            <i class="fas fa-chart-line mr-2"></i> Dashboard
+          </a>
+          <a href="dispositivos.html" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+            <i class="fas fa-list mr-2"></i> Meus Dispositivos
+          </a>
+          <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+            <i class="fas fa-sign-out-alt mr-2"></i> Sair
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensagem de status -->
+      <div id="message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+
+      <!-- Container principal: duas colunas (info e config) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Coluna Esquerda: Informações do dispositivo -->
+        <div class="card p-5 bg-white shadow-sm">
+          <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <i class="fas fa-microchip text-green-600 mr-2"></i> Informações do Dispositivo
+          </h2>
+          <div id="deviceInfo" class="space-y-3 text-sm">
+            <div><span class="font-medium text-gray-700">Nome:</span> <span id="deviceNickname">--</span></div>
+            <div><span class="font-medium text-gray-700">ID (código):</span> <span id="deviceCode">--</span></div>
+            <div><span class="font-medium text-gray-700">Status:</span> <span id="deviceStatus">--</span></div>
+            <hr class="my-2">
+            <div><span class="font-medium text-gray-700">MAC:</span> <span id="deviceMac">--</span></div>
+            <div><span class="font-medium text-gray-700">IP:</span> <span id="deviceIp">--</span></div>
+            <div><span class="font-medium text-gray-700">Versão Firmware:</span> <span id="firmwareVersion">--</span></div>
+            <div><span class="font-medium text-gray-700">Primeira inicialização:</span> <span id="firstBoot">--</span></div>
+            <div><span class="font-medium text-gray-700">Última inicialização:</span> <span id="lastBoot">--</span></div>
+            <div><span class="font-medium text-gray-700">Contador de boots:</span> <span id="bootCount">--</span></div>
+            <div><span class="font-medium text-gray-700">Última atualização:</span> <span id="lastUpdateInfo">--</span></div>
+          </div>
+        </div>
+
+        <!-- Coluna Direita: Configurações editáveis -->
+        <div class="card p-5 bg-white shadow-sm">
+          <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <i class="fas fa-sliders-h text-blue-600 mr-2"></i> Parâmetros de Configuração
+            <span id="adminBadge" class="ml-3 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full hidden">
+              <i class="fas fa-user-shield mr-1"></i> Administrador
+            </span>
+          </h2>
+          <form id="configForm" class="space-y-4">
+            <div>
+              <label class="block text-gray-700 font-medium mb-1">Intervalo de medição (segundos)</label>
+              <input type="number" id="intervaloMedicao" min="10" max="86400" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+              <p class="text-xs text-gray-500 mt-1">Tempo entre cada medição. Mínimo 10s, máximo 24h.</p>
+            </div>
+            <div>
+              <label class="block text-gray-700 font-medium mb-1">Número de amostras por medição</label>
+              <input type="number" id="amostrasMedia" min="1" max="100" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+              <p class="text-xs text-gray-500 mt-1">Quantas leituras serão tiradas e depois calculada a média.</p>
+            </div>
+            <div>
+              <label class="block text-gray-700 font-medium mb-1">Modo de envio</label>
+              <select id="modoEnvio" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="medio">Apenas média</option>
+                <option value="ambos">Média + dados brutos</option>
+                <option value="bruto">Apenas dados brutos</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-gray-700 font-medium mb-1">Modo de operação</label>
+              <select id="modoOperacao" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="sempreAtivo">Sempre ativo</option>
+                <option value="hibernar">Hibernar (deep sleep)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-gray-700 font-medium mb-1">Display local</label>
+              <select id="displayLigado" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="true">Ligado</option>
+                <option value="false">Desligado</option>
+              </select>
+            </div>
+            <div class="pt-4">
+              <button type="button" id="saveConfigBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-save mr-2"></i> Salvar Alterações
+              </button>
+              <span id="adminOnlyMsg" class="ml-3 text-sm text-gray-500 hidden"><i class="fas fa-lock mr-1"></i> Apenas administradores podem editar.</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Botão de voltar extra -->
+      <div class="mt-6 text-center">
+        <a href="index.html" class="text-blue-600 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Voltar ao Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="text-center text-white/60 text-sm py-4">
+    <p>NivelTec &copy; 2026 - Monitoramento inteligente de nível de água</p>
+  </footer>
+
+  <script>
+    // Configuração do Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyCORs2eW8qDTYe6SBA8o65nMoRVMAzhYXQ",
+      authDomain: "nivelbudo.firebaseapp.com",
+      databaseURL: "https://nivelbudo-default-rtdb.firebaseio.com",
+      projectId: "nivelbudo",
+      storageBucket: "nivelbudo.firebasestorage.app",
+      messagingSenderId: "817262285222",
+      appId: "1:817262285222:web:cabeeb3fe6d9602084bf67",
+      measurementId: "G-CD9WYSNR88"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // Elementos DOM
+    const deviceIdDisplay = document.getElementById('deviceIdDisplay');
+    const deviceNicknameSpan = document.getElementById('deviceNickname');
+    const deviceCodeSpan = document.getElementById('deviceCode');
+    const deviceStatusSpan = document.getElementById('deviceStatus');
+    const deviceMacSpan = document.getElementById('deviceMac');
+    const deviceIpSpan = document.getElementById('deviceIp');
+    const firmwareVersionSpan = document.getElementById('firmwareVersion');
+    const firstBootSpan = document.getElementById('firstBoot');
+    const lastBootSpan = document.getElementById('lastBoot');
+    const bootCountSpan = document.getElementById('bootCount');
+    const lastUpdateInfoSpan = document.getElementById('lastUpdateInfo');
+    const adminBadge = document.getElementById('adminBadge');
+    const adminOnlyMsg = document.getElementById('adminOnlyMsg');
+    const saveBtn = document.getElementById('saveConfigBtn');
+    const backToDashboardLink = document.getElementById('backToDashboard');
+
+    // Campos do formulário
+    const intervaloInput = document.getElementById('intervaloMedicao');
+    const amostrasInput = document.getElementById('amostrasMedia');
+    const modoEnvioSelect = document.getElementById('modoEnvio');
+    const modoOperacaoSelect = document.getElementById('modoOperacao');
+    const displayLigadoSelect = document.getElementById('displayLigado');
+
+    let currentUser = null;
+    let deviceId = null;
+    let isAdmin = false;
+
+    function showMessage(text, isError = false) {
+      const msgDiv = document.getElementById('message');
+      msgDiv.textContent = text;
+      msgDiv.classList.remove('hidden', 'bg-green-200', 'text-green-800', 'bg-red-200', 'text-red-800');
+      if (isError) {
+        msgDiv.classList.add('bg-red-200', 'text-red-800');
+      } else {
+        msgDiv.classList.add('bg-green-200', 'text-green-800');
+      }
+      setTimeout(() => {
+        msgDiv.classList.add('hidden');
+      }, 5000);
+    }
+
+    // Formatar timestamp
+    function formatTimestamp(timestamp) {
+      if (!timestamp || timestamp <= 0) return '--';
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '--';
+      return date.toLocaleString('pt-BR');
+    }
+
+    // Carregar informações do dispositivo (info e config)
+    async function loadDeviceData() {
+      try {
+        // Carrega informações do nó /dispositivos/[deviceId]/info
+        const infoSnapshot = await database.ref(`dispositivos/${deviceId}/info`).once('value');
+        const info = infoSnapshot.val() || {};
+        deviceMacSpan.textContent = info.mac || '--';
+        deviceIpSpan.textContent = info.ip || '--';
+        firmwareVersionSpan.textContent = info.firmwareVersion || '--';
+        firstBootSpan.textContent = formatTimestamp(info.firstBoot);
+        lastBootSpan.textContent = formatTimestamp(info.lastBoot);
+        bootCountSpan.textContent = info.bootCount !== undefined ? info.bootCount : '--';
+        lastUpdateInfoSpan.textContent = formatTimestamp(info.lastUpdate);
+
+        // Carrega status
+        const statusSnapshot = await database.ref(`dispositivos/${deviceId}/estado`).once('value');
+        const status = statusSnapshot.val() || 'desconhecido';
+        deviceStatusSpan.textContent = status;
+
+        // Carrega configuração atual
+        const configSnapshot = await database.ref(`dispositivos/${deviceId}/config`).once('value');
+        const config = configSnapshot.val() || {};
+        intervaloInput.value = config.intervaloMedicao !== undefined ? config.intervaloMedicao : 600;
+        amostrasInput.value = config.amostrasMedia !== undefined ? config.amostrasMedia : 5;
+        modoEnvioSelect.value = config.modoEnvio || 'ambos';
+        modoOperacaoSelect.value = config.modoOperacao || 'sempreAtivo';
+        displayLigadoSelect.value = config.displayLigado !== undefined ? String(config.displayLigado) : 'true';
+
+      } catch (err) {
+        console.error('Erro ao carregar dados do dispositivo:', err);
+        showMessage('Erro ao carregar dados do dispositivo.', true);
+      }
+    }
+
+    // Carregar apelido do dispositivo (da lista do usuário)
+    async function loadDeviceNickname() {
+      if (!currentUser) return;
+      const snapshot = await database.ref(`users/${currentUser.uid}/dispositivos/${deviceId}/apelido`).once('value');
+      const nickname = snapshot.val() || deviceId;
+      deviceNicknameSpan.textContent = nickname;
+    }
+
+    // Verificar se o usuário atual é administrador
+    async function checkAdmin() {
+      if (!currentUser) return false;
+      const snapshot = await database.ref(`admins/${currentUser.uid}`).once('value');
+      isAdmin = snapshot.val() === true;
+      if (isAdmin) {
+        adminBadge.classList.remove('hidden');
+        saveBtn.disabled = false;
+        adminOnlyMsg.classList.add('hidden');
+        // Habilita todos os campos do formulário
+        intervaloInput.disabled = false;
+        amostrasInput.disabled = false;
+        modoEnvioSelect.disabled = false;
+        modoOperacaoSelect.disabled = false;
+        displayLigadoSelect.disabled = false;
+      } else {
+        adminBadge.classList.add('hidden');
+        saveBtn.disabled = true;
+        adminOnlyMsg.classList.remove('hidden');
+        // Desabilita campos
+        intervaloInput.disabled = true;
+        amostrasInput.disabled = true;
+        modoEnvioSelect.disabled = true;
+        modoOperacaoSelect.disabled = true;
+        displayLigadoSelect.disabled = true;
+      }
+      return isAdmin;
+    }
+
+    // Salvar configuração (apenas admin)
+    async function saveConfig() {
+      if (!isAdmin) {
+        showMessage('Você não tem permissão para editar configurações.', true);
+        return;
+      }
+      const newConfig = {
+        intervaloMedicao: parseInt(intervaloInput.value, 10),
+        amostrasMedia: parseInt(amostrasInput.value, 10),
+        modoEnvio: modoEnvioSelect.value,
+        modoOperacao: modoOperacaoSelect.value,
+        displayLigado: displayLigadoSelect.value === 'true'
+      };
+      // Validações básicas
+      if (newConfig.intervaloMedicao < 10) newConfig.intervaloMedicao = 10;
+      if (newConfig.intervaloMedicao > 86400) newConfig.intervaloMedicao = 86400;
+      if (newConfig.amostrasMedia < 1) newConfig.amostrasMedia = 1;
+      if (newConfig.amostrasMedia > 100) newConfig.amostrasMedia = 100;
+
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Salvando...';
+      try {
+        await database.ref(`dispositivos/${deviceId}/config`).set(newConfig);
+        showMessage('Configurações salvas com sucesso!', false);
+        // Recarrega para garantir consistência
+        await loadDeviceData();
+      } catch (err) {
+        console.error('Erro ao salvar configuração:', err);
+        showMessage('Erro ao salvar configuração: ' + err.message, true);
+      } finally {
+        saveBtn.disabled = !isAdmin; // só habilita se admin
+        saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Salvar Alterações';
+      }
+    }
+
+    // Inicialização após autenticação
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      currentUser = user;
+      const urlParams = new URLSearchParams(window.location.search);
+      deviceId = urlParams.get('device');
+      if (!deviceId) {
+        showMessage('Nenhum dispositivo selecionado. Redirecionando...', true);
+        setTimeout(() => window.location.href = 'dispositivos.html', 2000);
+        return;
+      }
+      deviceIdDisplay.textContent = `ID: ${deviceId}`;
+      deviceCodeSpan.textContent = deviceId;
+      backToDashboardLink.href = `index.html?device=${deviceId}`;
+
+      // Carregar dados e verificar permissões
+      await loadDeviceNickname();
+      await loadDeviceData();
+      await checkAdmin();
+    });
+
+    // Evento de salvar
+    saveBtn.addEventListener('click', saveConfig);
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      auth.signOut().then(() => window.location.href = 'login.html');
+    });
+  </script>
+</body>
+</html>

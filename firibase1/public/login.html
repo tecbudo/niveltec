@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NivelTec - Login</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #14532d, #1e3a8a);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1rem;
+      box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s;
+    }
+    .btn-google {
+      background-color: #db4437;
+      transition: background-color 0.2s;
+    }
+    .btn-google:hover {
+      background-color: #c33c2e;
+    }
+    .device-badge {
+      background-color: #10b981;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 2rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+  </style>
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="card p-8 w-full max-w-md">
+    <div class="text-center mb-6">
+      <h1 class="text-3xl font-bold text-gray-800">NivelTec</h1>
+      <p class="text-gray-500 mt-1">Monitoramento de nível de água</p>
+    </div>
+
+    <!-- Badge de dispositivo detectado (se houver) -->
+    <div id="deviceBadge" class="device-badge hidden">
+      <i class="fas fa-microchip mr-2"></i> Dispositivo detectado
+    </div>
+
+    <!-- Mensagem de feedback -->
+    <div id="message" class="hidden mb-4 p-3 rounded-lg text-center font-medium"></div>
+
+    <div class="space-y-4">
+      <input type="email" id="email" placeholder="E-mail" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+      <input type="password" id="password" placeholder="Senha" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+    </div>
+
+    <button id="loginBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 mt-6 rounded-lg transition duration-300">
+      Entrar
+    </button>
+
+    <div class="flex items-center my-6">
+      <hr class="flex-grow border-gray-300">
+      <span class="px-3 text-gray-500 text-sm">Ou entre com</span>
+      <hr class="flex-grow border-gray-300">
+    </div>
+
+    <button id="googleBtn" class="w-full flex items-center justify-center btn-google text-white font-semibold py-3 rounded-lg transition duration-300">
+      <i class="fab fa-google mr-2"></i> Continuar com Google
+    </button>
+
+    <p class="text-center text-gray-500 mt-6 text-sm">
+      Não tem uma conta? <a id="cadastroLink" href="cadastro.html" class="text-green-600 hover:underline">Cadastre-se</a>
+    </p>
+  </div>
+
+  <script>
+    // Configuração do Firebase (substitua pelos dados do seu projeto)
+   const firebaseConfig = {
+  apiKey: "AIzaSyCORs2eW8qDTYe6SBA8o65nMoRVMAzhYXQ",
+  authDomain: "nivelbudo.firebaseapp.com",
+  databaseURL: "https://nivelbudo-default-rtdb.firebaseio.com",
+  projectId: "nivelbudo",
+  storageBucket: "nivelbudo.firebasestorage.app",
+  messagingSenderId: "817262285222",
+  appId: "1:817262285222:web:cabeeb3fe6d9602084bf67",
+  measurementId: "G-CD9WYSNR88"
+};
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    // Elementos DOM
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+    const googleBtn = document.getElementById('googleBtn');
+    const messageDiv = document.getElementById('message');
+    const deviceBadge = document.getElementById('deviceBadge');
+    const cadastroLink = document.getElementById('cadastroLink');
+
+    let deviceCodeFromURL = null;
+
+    // Função para exibir mensagens
+    function showMessage(text, isError = false) {
+      messageDiv.textContent = text;
+      messageDiv.classList.remove('hidden', 'bg-green-200', 'text-green-800', 'bg-red-200', 'text-red-800');
+      if (isError) {
+        messageDiv.classList.add('bg-red-200', 'text-red-800');
+      } else {
+        messageDiv.classList.add('bg-green-200', 'text-green-800');
+      }
+      setTimeout(() => {
+        messageDiv.classList.add('hidden');
+      }, 5000);
+    }
+
+    // Função para adicionar dispositivo ao usuário (se veio da URL)
+    function addDeviceToUser(userId, deviceCode, nickname = null) {
+      const deviceData = {
+        apelido: nickname || `Dispositivo ${deviceCode}`,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+      };
+      return database.ref(`users/${userId}/dispositivos/${deviceCode}`).set(deviceData)
+        .then(() => database.ref(`devices/${deviceCode}`).once('value'))
+        .then(snapshot => {
+          if (!snapshot.exists()) {
+            const newDevice = {
+              estado: "disponivel",
+              timestamp: firebase.database.ServerValue.TIMESTAMP
+            };
+            return database.ref(`devices/${deviceCode}`).set(newDevice);
+          }
+        });
+    }
+
+    // Função para verificar se o dispositivo já está associado e redirecionar
+    function handleDeviceAfterLogin(userId) {
+      if (!deviceCodeFromURL) {
+        window.location.href = 'dispositivos.html';
+        return;
+      }
+      // Verifica se o dispositivo já existe para o usuário
+      database.ref(`users/${userId}/dispositivos/${deviceCodeFromURL}`).once('value')
+        .then(snapshot => {
+          if (snapshot.exists()) {
+            // Já tem, redireciona para o dashboard
+            window.location.href = `index.html?device=${deviceCodeFromURL}`;
+          } else {
+            // Adiciona o dispositivo e depois redireciona
+            addDeviceToUser(userId, deviceCodeFromURL)
+              .then(() => {
+                window.location.href = `index.html?device=${deviceCodeFromURL}`;
+              })
+              .catch(err => {
+                console.error('Erro ao adicionar dispositivo:', err);
+                showMessage('Dispositivo detectado, mas ocorreu um erro ao cadastrá-lo. Tente novamente.', true);
+                setTimeout(() => window.location.href = 'dispositivos.html', 2000);
+              });
+          }
+        })
+        .catch(err => {
+          console.error('Erro ao verificar dispositivo:', err);
+          showMessage('Erro ao processar dispositivo. Redirecionando...', true);
+          setTimeout(() => window.location.href = 'dispositivos.html', 2000);
+        });
+    }
+
+    // Evento de login com email/senha
+    loginBtn.addEventListener('click', () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+      if (!email || !password) {
+        showMessage('Preencha todos os campos.', true);
+        return;
+      }
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Entrando...';
+      auth.signInWithEmailAndPassword(email, password)
+        .then(userCredential => {
+          const userId = userCredential.user.uid;
+          handleDeviceAfterLogin(userId);
+        })
+        .catch(error => {
+          console.error(error);
+          showMessage('Erro: ' + error.message, true);
+          loginBtn.disabled = false;
+          loginBtn.innerHTML = 'Entrar';
+        });
+    });
+
+    // Login com Google
+    googleBtn.addEventListener('click', () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      googleBtn.disabled = true;
+      googleBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Entrando...';
+      auth.signInWithPopup(provider)
+        .then(result => {
+          const userId = result.user.uid;
+          // Se for novo usuário, cria os dados básicos no banco
+          if (result.additionalUserInfo.isNewUser) {
+            const userData = {
+              nome: result.user.displayName,
+              email: result.user.email,
+              createdAt: firebase.database.ServerValue.TIMESTAMP,
+              dispositivos: {}
+            };
+            database.ref(`users/${userId}`).set(userData)
+              .then(() => handleDeviceAfterLogin(userId))
+              .catch(err => {
+                console.error('Erro ao salvar usuário:', err);
+                handleDeviceAfterLogin(userId);
+              });
+          } else {
+            handleDeviceAfterLogin(userId);
+          }
+        })
+        .catch(error => {
+          console.error(error);
+          showMessage('Erro: ' + error.message, true);
+          googleBtn.disabled = false;
+          googleBtn.innerHTML = '<i class="fab fa-google mr-2"></i> Continuar com Google';
+        });
+    });
+
+    // Detectar parâmetro device na URL e ajustar o link de cadastro
+    const urlParams = new URLSearchParams(window.location.search);
+    deviceCodeFromURL = urlParams.get('device');
+    if (deviceCodeFromURL) {
+      deviceBadge.classList.remove('hidden');
+      cadastroLink.href = `cadastro.html?device=${deviceCodeFromURL}`;
+      // Guardar no sessionStorage para caso seja usado depois
+      sessionStorage.setItem('deviceCodeFromURL', deviceCodeFromURL);
+    }
+
+    // Se o usuário já estiver autenticado, redireciona imediatamente
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        handleDeviceAfterLogin(user.uid);
+      }
+    });
+  </script>
+</body>
+</html>

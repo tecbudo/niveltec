@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Folder e Etiqueta - NivelTec</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #14532d, #1e3a8a);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #14532d, #1e3a8a);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .content {
+            padding: 20px;
+        }
+        
+        .step {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+        
+        .step-number {
+            background: #10b981;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            flex-shrink: 0;
+            margin-right: 12px;
+        }
+        
+        .qr-section {
+            text-align: center;
+            padding: 20px;
+            border-top: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+            margin: 20px 0;
+        }
+        
+        .qr-code {
+            width: 180px;
+            height: 180px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .footer {
+            padding: 15px 20px;
+            text-align: center;
+            background-color: #f9fafb;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .label-card {
+            width: 300px;
+            height: 150px;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .label-info {
+            flex: 1;
+            padding-right: 15px;
+        }
+        
+        .label-qr {
+            width: 100px;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .download-options {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: #3B82F6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563EB;
+        }
+        
+        .btn-success {
+            background: #10B981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .preview-item {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .info-card {
+            background-color: #f0fdf4;
+            border-left: 4px solid #10b981;
+            padding: 12px;
+            margin: 16px 0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .mono {
+            font-family: monospace;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1 class="text-2xl font-bold">NivelTec - Gerador de Etiqueta</h1>
+                <p class="mt-2">Sistema de Monitoramento de Nível de Água</p>
+            </div>
+            
+            <div class="content">
+                <div class="mb-6">
+                    <label class="block text-gray-700 mb-2 font-medium">Endereço MAC do dispositivo (ex: AA:BB:CC:DD:EE:FF):</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="macInput" placeholder="MAC: AA:BB:CC:DD:EE:FF" class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 uppercase">
+                        <button onclick="generateFromMac()" class="bg-green-600 text-white font-semibold p-3 rounded-lg hover:bg-green-700 transition duration-300">
+                            Gerar ID do Dispositivo
+                        </button>
+                    </div>
+                    <div class="info-card mt-2">
+                        <i class="fas fa-info-circle"></i> Insira o MAC do dispositivo (formato com dois pontos). Será gerado um identificador único de 9 caracteres (hex) com correção de erro.
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-gray-700 mb-2 font-medium">Ou insira o código do dispositivo (9 caracteres hex):</label>
+                    <div class="flex">
+                        <input type="text" id="deviceCodeInput" maxlength="9" placeholder="Ex: A1B2C3D4E" class="flex-grow p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-green-500 uppercase">
+                        <button onclick="generateFromCode()" class="bg-blue-600 text-white font-semibold p-3 rounded-r-lg hover:bg-blue-700 transition duration-300">
+                            Gerar Material
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="message" class="hidden mb-4 p-3 rounded-lg text-center font-medium transition-all duration-300"></div>
+                
+                <div id="previews" class="preview-container hidden">
+                    <div class="preview-item">
+                        <h3 class="font-semibold mb-3">Folder de Instruções</h3>
+                        <div id="folderPreview" class="manual-card" style="width: 300px; transform: scale(0.7); transform-origin: top center;">
+                            <div class="header">
+                                <h1 class="text-xl font-bold">NivelTec</h1>
+                                <p class="text-xs mt-1">Monitoramento de Nível de Água</p>
+                            </div>
+                            
+                            <div class="content">
+                                <div class="step">
+                                    <div class="step-number">1</div>
+                                    <div>
+                                        <h3 class="font-semibold text-sm">Acesse o Sistema</h3>
+                                        <p class="text-xs text-gray-600 mt-1">Use o QR Code ao lado</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="step">
+                                    <div class="step-number">2</div>
+                                    <div>
+                                        <h3 class="font-semibold text-sm">Crie sua Conta ou faça Login</h3>
+                                        <p class="text-xs text-gray-600 mt-1">Você será direcionado automaticamente</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="step">
+                                    <div class="step-number">3</div>
+                                    <div>
+                                        <h3 class="font-semibold text-sm">Adicione seu Dispositivo</h3>
+                                        <p class="text-xs text-gray-600 mt-1">Código: <span id="previewDeviceCode" class="font-mono font-bold"></span></p>
+                                    </div>
+                                </div>
+                                
+                                <div class="step">
+                                    <div class="step-number">4</div>
+                                    <div>
+                                        <h3 class="font-semibold text-sm">Monitore o Nível</h3>
+                                        <p class="text-xs text-gray-600 mt-1">Acompanhe os dados em tempo real</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="qr-section">
+                                    <h3 class="font-semibold mb-3 text-sm">Acesse pelo QR Code</h3>
+                                    <div id="folderQrCode" class="qr-code"></div>
+                                    <p class="text-xs text-gray-600 mt-3">Use a câmera do celular para escanear</p>
+                                </div>
+                            </div>
+                            
+                            <div class="footer">
+                                <p class="text-xs">NivelTec &copy; 2026 - Monitoramento Inteligente</p>
+                            </div>
+                        </div>
+                        <div class="download-options">
+                            <button onclick="downloadFolder('png')" class="btn btn-primary">Download PNG</button>
+                            <button onclick="downloadFolder('jpg')" class="btn btn-success">Download JPG</button>
+                        </div>
+                    </div>
+                    
+                    <div class="preview-item">
+                        <h3 class="font-semibold mb-3">Etiqueta do Dispositivo</h3>
+                        <div id="labelPreview" class="label-card">
+                            <div class="label-info">
+                                <h4 class="font-bold text-lg">NivelTec</h4>
+                                <p class="text-sm mt-1">Dispositivo:</p>
+                                <p class="font-mono font-bold text-green-700" id="labelDeviceCode"></p>
+                                <p class="text-xs mt-2">nivelbudo.web.app</p>
+                            </div>
+                            <div id="labelQrCode" class="label-qr"></div>
+                        </div>
+                        <div class="download-options">
+                            <button onclick="downloadLabel('png')" class="btn btn-primary">Download PNG</button>
+                            <button onclick="downloadLabel('jpg')" class="btn btn-success">Download JPG</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Função que calcula o deviceId a partir do MAC (mesmo algoritmo do firmware)
+        function crc32FromMAC(macStr) {
+            // Remove dois pontos e deixa maiúsculo
+            macStr = macStr.replace(/:/g, '').toUpperCase();
+            if (macStr.length !== 12) return null;
+            
+            // Converte para array de bytes
+            let macBytes = [];
+            for (let i = 0; i < 6; i++) {
+                let byteStr = macStr.substring(i * 2, i * 2 + 2);
+                macBytes.push(parseInt(byteStr, 16));
+            }
+            
+            // Algoritmo CRC-32 (usando tabela pré-calculada)
+            let crc = 0xFFFFFFFF;
+            const table = new Array(256);
+            for (let i = 0; i < 256; i++) {
+                let c = i;
+                for (let k = 0; k < 8; k++) {
+                    c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                }
+                table[i] = c;
+            }
+            for (let i = 0; i < macBytes.length; i++) {
+                crc = (crc >>> 8) ^ table[(crc ^ macBytes[i]) & 0xFF];
+            }
+            crc = crc ^ 0xFFFFFFFF;
+            
+            // Formata como 8 caracteres hex
+            let crcHex = (crc >>> 0).toString(16).toUpperCase().padStart(8, '0');
+            
+            // Calcula a paridade (XOR dos 4 bytes) e mantém 4 bits
+            let b1 = (crc & 0xFF);
+            let b2 = (crc >> 8) & 0xFF;
+            let b3 = (crc >> 16) & 0xFF;
+            let b4 = (crc >> 24) & 0xFF;
+            let parity = (b1 ^ b2 ^ b3 ^ b4) & 0x0F;
+            let parityHex = parity.toString(16).toUpperCase();
+            
+            return crcHex + parityHex;
+        }
+        
+        // Valida se um deviceId está no formato correto (9 hex com paridade)
+        function validateDeviceId(deviceId) {
+            if (!deviceId || deviceId.length !== 9) return false;
+            const hexRegex = /^[0-9A-F]{9}$/i;
+            if (!hexRegex.test(deviceId)) return false;
+            
+            const crcPart = deviceId.substring(0, 8);
+            const parityGiven = deviceId.charAt(8).toUpperCase();
+            const crc32 = parseInt(crcPart, 16);
+            if (isNaN(crc32)) return false;
+            const b1 = (crc32 & 0xFF);
+            const b2 = (crc32 >> 8) & 0xFF;
+            const b3 = (crc32 >> 16) & 0xFF;
+            const b4 = (crc32 >> 24) & 0xFF;
+            const parityCalc = (b1 ^ b2 ^ b3 ^ b4) & 0x0F;
+            const parityCalcHex = parityCalc.toString(16).toUpperCase();
+            return parityGiven === parityCalcHex;
+        }
+        
+        let currentDeviceId = '';
+        
+        function showMessage(text, isError = false) {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = text;
+            messageElement.classList.remove('hidden', 'bg-red-200', 'text-red-800', 'bg-green-200', 'text-green-800');
+            if (isError) {
+                messageElement.classList.add('bg-red-200', 'text-red-800');
+            } else {
+                messageElement.classList.add('bg-green-200', 'text-green-800');
+            }
+            setTimeout(() => {
+                messageElement.classList.add('hidden');
+            }, 5000);
+        }
+        
+        function generateQRCode(elementId, text, errorCorrection = 'H') {
+            const qrElement = document.getElementById(elementId);
+            qrElement.innerHTML = '';
+            // Gera QR com alta correção de erros (nível H)
+            const qr = qrcode(0, errorCorrection);
+            qr.addData(text);
+            qr.make();
+            qrElement.innerHTML = qr.createSvgTag({
+                scalable: true,
+                margin: 2,
+                color: '#2c3e50',
+                alt: 'QR Code'
+            });
+        }
+        
+        function generateAssets(deviceId) {
+            if (!validateDeviceId(deviceId)) {
+                showMessage('Código inválido. Deve ter 9 caracteres hex (0-9, A-F) com paridade correta.', true);
+                return false;
+            }
+            currentDeviceId = deviceId;
+            
+            // URL de login com o deviceId
+            const loginUrl = `https://nivelbudo.web.app/login?device=${deviceId}`;
+            
+            // Gerar QR Codes com alta correção de erro
+            generateQRCode('folderQrCode', loginUrl, 'H');
+            generateQRCode('labelQrCode', deviceId, 'H');
+            
+            // Atualizar textos
+            document.getElementById('previewDeviceCode').textContent = deviceId;
+            document.getElementById('labelDeviceCode').textContent = deviceId;
+            
+            // Mostrar previews
+            document.getElementById('previews').classList.remove('hidden');
+            showMessage('Folder e etiqueta gerados com sucesso!', false);
+            return true;
+        }
+        
+        function generateFromMac() {
+            let mac = document.getElementById('macInput').value.trim().toUpperCase();
+            if (!mac) {
+                showMessage('Digite o endereço MAC.', true);
+                return;
+            }
+            // Remove possíveis separadores e valida
+            let cleanMac = mac.replace(/[^0-9A-F]/g, '');
+            if (cleanMac.length !== 12) {
+                showMessage('MAC inválido. Deve conter 12 caracteres hex (ex: AA:BB:CC:DD:EE:FF)', true);
+                return;
+            }
+            const deviceId = crc32FromMAC(cleanMac);
+            if (!deviceId) {
+                showMessage('Erro ao gerar código a partir do MAC.', true);
+                return;
+            }
+            // Preenche o campo de código com o resultado
+            document.getElementById('deviceCodeInput').value = deviceId;
+            generateAssets(deviceId);
+        }
+        
+        function generateFromCode() {
+            let code = document.getElementById('deviceCodeInput').value.trim().toUpperCase();
+            if (!code) {
+                showMessage('Digite o código do dispositivo (9 caracteres hex).', true);
+                return;
+            }
+            generateAssets(code);
+        }
+        
+        // Funções de download
+        function downloadFolder(format) {
+            const folderElement = document.getElementById('folderPreview');
+            html2canvas(folderElement, {
+                scale: 3,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
+                downloadCanvas(canvas, `folder-niveltec-${currentDeviceId}`, format);
+            }).catch(err => {
+                console.error(err);
+                showMessage('Erro ao gerar imagem do folder.', true);
+            });
+        }
+        
+        function downloadLabel(format) {
+            const labelElement = document.getElementById('labelPreview');
+            html2canvas(labelElement, {
+                scale: 3,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
+                downloadCanvas(canvas, `etiqueta-niveltec-${currentDeviceId}`, format);
+            }).catch(err => {
+                console.error(err);
+                showMessage('Erro ao gerar imagem da etiqueta.', true);
+            });
+        }
+        
+        function downloadCanvas(canvas, filename, format) {
+            const link = document.createElement('a');
+            link.download = `${filename}.${format}`;
+            if (format === 'jpg') {
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+            } else {
+                link.href = canvas.toDataURL('image/png');
+            }
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showMessage(`Download realizado! (${filename}.${format})`, false);
+        }
+        
+        // Evento para permitir geração direta ao pressionar Enter no campo de código
+        document.getElementById('deviceCodeInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generateFromCode();
+            }
+        });
+        document.getElementById('macInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generateFromMac();
+            }
+        });
+    </script>
+</body>
+</html>
