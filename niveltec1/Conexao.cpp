@@ -1,279 +1,285 @@
 #include "Conexao.h"
+#include <addons/TokenHelper.h>
+#include <addons/RTDBHelper.h>
 #include <CRC32.h>
 
 WiFiManager wifiManager;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -3 * 3600);
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
 Preferences preferences;
 String deviceId = "";
 
-// === OBJETOS DO FIREBASECLIENT ===
-WiFiClientSecure ssl_client;
-void getNetworkData(String &ip, String &mac, WiFiSTAConnectStatus &status); 
-
-AsyncClient aClient(ssl_client, getNetworkData);
-FirebaseClient firebaseClient;
-UserAuth user_auth(API_KEY, USER_EMAIL, USER_PASSWORD);
-RealtimeDatabase rtbd(DATABASE_URL);
-
-// Callback de rede (exigido pelo AsyncClient)
-void getNetworkData(String &ip, String &mac, WiFiSTAConnectStatus &status) {
-    ip = WiFi.localIP().toString();
-    mac = WiFi.macAddress();
-    status = (WiFi.status() == WL_CONNECTED) ? WiFiSTAConnectStatus::Connected : WiFiSTAConnectStatus::Disconnected;
-}
-
-// Estrutura para tornar as operações assíncronas em bloqueantes
-struct FirebaseResult {
-    bool done = false;
-    bool success = false;
-    String payload = "";
-    String errorMsg = "";
-};
-
-// ... (funções generateDeviceId e validateDeviceId permanecem iguais) ...
 String generateDeviceId() {
-    String macStr = WiFi.macAddress();
-    macStr.replace(":", "");
-    macStr.toUpperCase();
-    uint8_t mac[6];
-    for (int i = 0; i < 6; i++) {
-        String byteStr = macStr.substring(i * 2, i * 2 + 2);
-        mac[i] = (uint8_t)strtoul(byteStr.c_str(), NULL, 16);
-    }
-    CRC32 crc;
-    crc.update(mac, 6);
-    uint32_t crc32 = crc.finalize();
-    char crcHex[9];
-    sprintf(crcHex, "%08X", crc32);
-    uint8_t parity = (crc32 & 0xFF) ^ ((crc32 >> 8) & 0xFF) ^ ((crc32 >> 16) & 0xFF) ^ ((crc32 >> 24) & 0xFF);
-    parity &= 0x0F;
-    char parityHex[2];
-    sprintf(parityHex, "%X", parity);
-    return String(crcHex) + String(parityHex);
+  String macStr = WiFi.macAddress();
+  macStr.replace(":", "");
+  macStr.toUpperCase();
+
+  uint8_t mac[6];
+  for (int i = 0; i < 6; i++) {
+    String byteStr = macStr.substring(i * 2, i * 2 + 2);
+    mac[i] = (uint8_t)strtoul(byteStr.c_str(), NULL, 16);
+  }
+
+  CRC32 crc;
+  crc.update(mac, 6);
+  uint32_t crc32 = crc.finalize();
+
+  char crcHex[9];
+  sprintf(crcHex, "%08X", crc32);
+
+  uint8_t parity = (crc32 & 0xFF) ^ ((crc32 >> 8) & 0xFF) ^ ((crc32 >> 16) & 0xFF) ^ ((crc32 >> 24) & 0xFF);
+  parity &= 0x0F;               
+  char parityHex[2];
+  sprintf(parityHex, "%X", parity);
+
+  return String(crcHex) + String(parityHex);
 }
 
-bool validateDeviceId(const String& deviceId) {
-    if (deviceId.length() != 9) return false;
-    String crcPart = deviceId.substring(0, 8);
-    char parityGiven = deviceId.charAt(8);
-    uint32_t crc32 = (uint32_t)strtoul(crcPart.c_str(), NULL, 16);
-    uint8_t parityCalc = (crc32 & 0xFF) ^ ((crc32 >> 8) & 0xFF) ^ ((crc32 >> 16) & 0xFF) ^ ((crc32 >> 24) & 0xFF);
-    parityCalc &= 0x0F;
-    char parityCalcHex[2];
-    sprintf(parityCalcHex, "%X", parityCalc);
-    return parityGiven == parityCalcHex[0];
+bool validateDeviceId(const String& id) {
+  if (id.length() != 9) return false;
+  String crcPart = id.substring(0, 8);
+  char parityGiven = id.charAt(8);
+  uint32_t crc32 = (uint32_t)strtoul(crcPart.c_str(), NULL, 16);
+  uint8_t parityCalc = (crc32 & 0xFF) ^ ((crc32 >> 8) & 0xFF) ^ ((crc32 >> 16) & 0xFF) ^ ((crc32 >> 24) & 0xFF);
+  parityCalc &= 0x0F;
+  char parityCalcHex[2];
+  sprintf(parityCalcHex, "%X", parityCalc);
+  return parityGiven == parityCalcHex[0];
 }
 
 void setupConexao() {
-    Serial.println("Conectando WiFi...");
-    wifiManager.setConfigPortalTimeout(180);
-    if (!wifiManager.autoConnect("NivelTec_IFS")) {
-        Serial.println("Falha WiFi. Reiniciando...");
-        delay(3000);
-        ESP.restart();
-    }
-    Serial.println("WiFi conectado!");
+  Serial.println("Conectando WiFi...");
+  wifiManager.setConfigPortalTimeout(180);
+  if (!wifiManager.autoConnect("NivelTec_IFS")) {
+    Serial.println("Falha WiFi. Reiniciando...");
+    delay(3000);
+    ESP.restart();
+  }
+  Serial.println("WiFi conectado!");
 
-    deviceId = generateDeviceId();
-    preferences.begin("niveltec", false);
-    if (!preferences.isKey("deviceId")) {
-        preferences.putString("deviceId", deviceId);
-    } else {
-        deviceId = preferences.getString("deviceId");
-        if (!validateDeviceId(deviceId)) {
-            deviceId = generateDeviceId();
-            preferences.putString("deviceId", deviceId);
-        }
-    }
-    preferences.end();
-    Serial.print("Device ID: "); Serial.println(deviceId);
+  deviceId = generateDeviceId(); 
 
-    timeClient.begin();
-    timeClient.setTimeOffset(-3 * 3600);
-    while (!timeClient.update()) {
-        timeClient.forceUpdate();
-        delay(1000);
+  preferences.begin("niveltec", false);
+  if (!preferences.isKey("deviceId")) {
+    preferences.putString("deviceId", deviceId);
+    Serial.println("Novo Device ID gerado: " + deviceId);
+  } else {
+    deviceId = preferences.getString("deviceId"); 
+    if (!validateDeviceId(deviceId)) {
+      Serial.println("Device ID inválido! Regenerando...");
+      deviceId = generateDeviceId();
+      preferences.putString("deviceId", deviceId);
     }
-    Serial.println("Tempo sincronizado");
+    Serial.println("Device ID carregado: " + deviceId);
+  }
+  preferences.end();
 
-    ssl_client.setInsecure(); 
+  timeClient.begin();
+  timeClient.setTimeOffset(-3 * 3600);
+  while (!timeClient.update()) {
+    timeClient.forceUpdate();
+    delay(1000);
+  }
+
+  config.api_key = API_KEY;
+  config.database_url = DATABASE_URL;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.token_status_callback = tokenStatusCallback; 
+  config.max_token_generation_retry = 5;
+
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectNetwork(true);
+  fbdo.setBSSLBufferSize(4096, 1024);
+  fbdo.setResponseSize(2048);
+
+  for (int i = 0; i < 10; i++) {
+    if (Firebase.ready()) break;
+    delay(500);
+  }
+
+  if (Firebase.ready()) {
+    Serial.println("Firebase autenticado");
+    updateDeviceStatus("ativo");
     
-    // Inicia autenticação
-    firebaseClient.auth(aClient, user_auth);
-    
-    Serial.println("Autenticando no Firebase...");
-    unsigned long startAuth = millis();
-    // CORREÇÃO: Usamos user_auth.isAuthenticated() em vez de firebaseClient.authenticated()
-    while (!user_auth.isAuthenticated() && (millis() - startAuth < 10000)) {
-        firebaseClient.loop(); 
-        delay(10);
+    // Testa a leitura inicial das configs
+    int intv; int amos; String env; String oper; bool disp; float valX;
+    if (getConfigFromFirebase(intv, amos, env, oper, disp, valX)) {
+        Serial.println("✓ Configurações validadas no início.");
     }
-
-    if (user_auth.isAuthenticated()) {
-        Serial.println("Firebase autenticado");
-        updateDeviceStatus("ativo");
-        
-        int intv; int amos; String env; String oper; bool disp;
-        if (getConfigFromFirebase(intv, amos, env, oper, disp)) {
-            Serial.println("✓ Configurações validadas no início.");
-        }
-    } else {
-        Serial.println("Falha na autenticação do Firebase");
-    }
+  } else {
+    Serial.println("Falha na autenticação do Firebase");
+  }
 }
 
 bool isConnected() {
-    // CORREÇÃO: user_auth.isAuthenticated()
-    return (WiFi.status() == WL_CONNECTED) && user_auth.isAuthenticated();
+  return (WiFi.status() == WL_CONNECTED) && Firebase.ready();
 }
 
-unsigned long getTimestamp() { return timeClient.getEpochTime(); }
-String getFormattedTime() { return timeClient.getFormattedTime(); }
+unsigned long getTimestamp() {
+  return timeClient.getEpochTime();
+}
+
+String getFormattedTime() {
+  return timeClient.getFormattedTime();
+}
 
 String getTimeString() {
-    time_t now = timeClient.getEpochTime();
-    struct tm *timeinfo = localtime(&now);
-    char buffer[30];
-    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-    return String(buffer);
+  time_t now = timeClient.getEpochTime();
+  struct tm *timeinfo = localtime(&now);
+  char buffer[30];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+  return String(buffer);
 }
 
 String getDeviceId() {
-    if (deviceId.length() == 0) {
-        preferences.begin("niveltec", true);
-        deviceId = preferences.getString("deviceId", "");
-        preferences.end();
-    }
-    return deviceId;
+  if (deviceId.length() == 0) {
+    preferences.begin("niveltec", true);
+    deviceId = preferences.getString("deviceId", "");
+    preferences.end();
+  }
+  return deviceId;
 }
-
-// === WRAPPERS COM CALLBACKS CORRIGIDOS (AsyncResult) ===
 
 bool sendDataToFirebase(const String &path, FirebaseJson &json) {
-    if (!user_auth.isAuthenticated()) return false;
-    
-    FirebaseResult res;
-    // CORREÇÃO: O callback agora recebe AsyncResult &result
-    rtbd.set(aClient, path, json, [&res](AsyncResult &result) {
-        res.done = true; 
-        res.success = result.success();
-    }, [&res](FirebaseError error) {
-        res.done = true; 
-        res.success = false; 
-        res.errorMsg = error.message();
-    });
-
-    unsigned long start = millis();
-    while (!res.done && (millis() - start < 5000)) { firebaseClient.loop(); delay(5); }
-    
-    if (!res.success) Serial.print("Erro RTDB: ") + res.errorMsg;
-    return res.success;
+  if (!Firebase.ready()) return false;
+  
+  fbdo.clear(); 
+  if (Firebase.RTDB.setJSON(&fbdo, path, &json)) {
+    return true;
+  } else {
+    Serial.print("Erro RTDB: ");
+    Serial.println(fbdo.errorReason());
+    return false;
+  }
 }
 
-bool getConfigFromFirebase(int &intervalo, int &amostras, String &envio, String &operacao, bool &display) {
-    if (!user_auth.isAuthenticated()) return false;
-    String path = "/dispositivos/" + deviceId + "/config";
+bool getConfigFromFirebase(int &intervalo, int &amostras, String &envio, String &operacao, bool &display, float &valorX) {
+  if (!Firebase.ready()) return false;
+  
+  String path = "/dispositivos/" + deviceId + "/config";
+  
+  fbdo.clear(); 
+  bool gotData = Firebase.RTDB.getJSON(&fbdo, path.c_str());
+  
+  if (!gotData) {
+    String err = fbdo.errorReason();
+    int httpCode = fbdo.httpCode();
     
-    FirebaseResult res;
-    rtbd.get(aClient, path, [&res](AsyncResult &result) {
-        res.done = true; 
-        res.success = result.success();
-        res.payload = result.c_str(); // Pega o payload como string
-    }, [&res](FirebaseError error) {
-        res.done = true; 
-        res.success = false; 
-        res.errorMsg = error.message();
-    });
-
-    unsigned long start = millis();
-    while (!res.done && (millis() - start < 5000)) { firebaseClient.loop(); delay(5); }
-
-    if (!res.success || res.payload == "null" || res.payload == "") {
-        Serial.println("Config não encontrada no Firebase. Criando padrão...");
+    // BLINDAGEM DEFINITIVA: Só cria config padrão se o Firebase confirmar que o caminho não existe (404)
+    // Se for timeout, erro SSL ou erro de servidor (httpCode == 0, 500, etc), ignora e tenta depois.
+    if (httpCode == 404 || err == "path not found" || err == "null") {
+        Serial.println("Config não encontrada no Firebase (404). Criando padrão...");
         enviarConfigPadrao();
-        delay(500); 
+        delay(300);
+        fbdo.clear();
         
-        res.done = false; res.success = false; res.payload = "";
-        rtbd.get(aClient, path, [&res](AsyncResult &result) {
-            res.done = true; 
-            res.success = result.success();
-            res.payload = result.c_str();
-        }, [&res](FirebaseError error) { 
-            res.done = true; 
-            res.success = false; 
-        });
-        
-        start = millis();
-        while (!res.done && (millis() - start < 5000)) { firebaseClient.loop(); delay(5); }
-        if (!res.success) return false;
+        if (Firebase.RTDB.getJSON(&fbdo, path.c_str()) && fbdo.dataType() != "null") {
+          FirebaseJson &json = fbdo.jsonObject();
+          FirebaseJsonData result;
+          if (json.get(result, "intervaloMedicao")) intervalo = result.to<int>();
+          if (json.get(result, "amostrasMedia")) amostras = result.to<int>();
+          if (json.get(result, "modoEnvio")) envio = result.to<String>();
+          if (json.get(result, "modoOperacao")) operacao = result.to<String>();
+          if (json.get(result, "displayLigado")) display = result.to<bool>();
+          if (json.get(result, "valorX")) valorX = result.to<float>();
+          return true;
+        }
+    } else {
+        // É apenas uma falha de rede momentânea (SSL, Timeout). Apenas ignora e mantém as configs atuais.
+        Serial.println("Falha de rede ao ler config. Mantendo as anteriores.");
+        return false; 
     }
-
-    FirebaseJson json;
-    json.setJsonData(res.payload);
-    FirebaseJsonData result;
-    if (json.get(result, "intervaloMedicao")) intervalo = result.to<int>();
-    if (json.get(result, "amostrasMedia")) amostras = result.to<int>();
-    if (json.get(result, "modoEnvio")) envio = result.to<String>();
-    if (json.get(result, "modoOperacao")) operacao = result.to<String>();
-    if (json.get(result, "displayLigado")) display = result.to<bool>();
-    
-    return true;
+    return false;
+  }
+  
+  FirebaseJson &json = fbdo.jsonObject();
+  FirebaseJsonData result;
+  if (json.get(result, "intervaloMedicao")) intervalo = result.to<int>();
+  if (json.get(result, "amostrasMedia")) amostras = result.to<int>();
+  if (json.get(result, "modoEnvio")) envio = result.to<String>();
+  if (json.get(result, "modoOperacao")) operacao = result.to<String>();
+  if (json.get(result, "displayLigado")) display = result.to<bool>();
+  if (json.get(result, "valorX")) valorX = result.to<float>();
+  
+  return true;
 }
 
 void enviarConfigPadrao() {
-    if (!user_auth.isAuthenticated()) return;
-    String path = "/dispositivos/" + deviceId + "/config";
-    FirebaseJson json;
-    json.set("intervaloMedicao", 600);
-    json.set("amostrasMedia", 5);
-    json.set("modoEnvio", "ambos");
-    json.set("modoOperacao", "sempreAtivo");
-    json.set("displayLigado", true);
-    sendDataToFirebase(path, json);
+  if (!Firebase.ready()) return;
+  
+  String path = "/dispositivos/" + deviceId + "/config";
+  
+  FirebaseJson json;
+  json.set("intervaloMedicao", 600);
+  json.set("amostrasMedia", 50);
+  json.set("modoEnvio", "ambos");
+  json.set("modoOperacao", "sempreAtivo");
+  json.set("displayLigado", true);
+  json.set("valorX", 29.8); 
+  
+  fbdo.clear();
+  if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json)) {
+    Serial.println("✓ Config padrão criada no Firebase!");
+  } else {
+    Serial.println("✗ Erro ao criar config padrão: " + fbdo.errorReason());
+  }
 }
 
-void enviarDados(float d1, float d2, float media, const String &modo) {
-    if (!user_auth.isAuthenticated()) return;
-    unsigned long now = getTimestamp();
-    String path = "/dispositivos/" + deviceId + "/medicoes/" + String(now);
-    FirebaseJson json;
-    json.set("sensor1_dist", d1);
-    json.set("sensor2_dist", d2);
-    json.set("media", media);
-    json.set("timestamp", now);
-    sendDataToFirebase(path, json);
-
-    String lastPath = "/dispositivos/" + deviceId + "/ultimaLeitura";
-    FirebaseResult res;
-    rtbd.set(aClient, lastPath, (int)now, [&res](AsyncResult &result) {
-        res.done = true; res.success = result.success();
-    }, [&res](FirebaseError error) { 
-        res.done = true; res.success = false; 
-    });
-    while (!res.done && user_auth.isAuthenticated()) { firebaseClient.loop(); delay(5); }
+// ==================== ENVIO DE DADOS COMPLETO ====================
+void enviarDados(float y_fusao, float sigma_y, float d1, float desv1, float d2, float desv2, unsigned long timestamp, const String &modo) {
+  if (!Firebase.ready()) return;
+  
+  String path = "/dispositivos/" + deviceId + "/medicoes/" + String(timestamp);
+  FirebaseJson json;
+  
+  json.set("nivel_y", y_fusao);      
+  json.set("sigma_y", sigma_y);      // Incerteza final do Kalman
+  json.set("sensor1_dist", d1);      
+  json.set("sensor1_desv", desv1);   // Desvio padrão do S1
+  json.set("sensor2_dist", d2);      
+  json.set("sensor2_desv", desv2);   // Desvio padrão do S2
+  json.set("timestamp", timestamp);
+  
+  sendDataToFirebase(path, json);
+  
+  String lastPath = "/dispositivos/" + deviceId + "/ultimaLeitura";
+  fbdo.clear();
+  Firebase.RTDB.setInt(&fbdo, lastPath, timestamp);
 }
 
 void updateDeviceStatus(const String &status) {
-    if (!user_auth.isAuthenticated()) return;
-    String path = "/dispositivos/" + deviceId + "/estado";
-    FirebaseResult res;
-    rtbd.set(aClient, path, status, [&res](AsyncResult &result) {
-        res.done = true; res.success = result.success();
-    }, [&res](FirebaseError error) { 
-        res.done = true; res.success = false; 
-    });
-    while (!res.done && user_auth.isAuthenticated()) { firebaseClient.loop(); delay(5); }
+  if (!Firebase.ready()) return;
+  String path = "/dispositivos/" + deviceId + "/estado";
+  fbdo.clear();
+  Firebase.RTDB.setString(&fbdo, path, status);
+}
+
+void enviarStatusCalibracao(bool calibrado) {
+  if (!Firebase.ready()) return;
+  String path = "/dispositivos/" + deviceId + "/calibracao";
+  FirebaseJson json;
+  json.set("calibrado", calibrado);
+  json.set("timestamp", getTimestamp());
+  
+  fbdo.clear();
+  if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json)) {
+      Serial.println("Status de calibração enviado ao Firebase.");
+  }
 }
 
 bool sendDeviceInfoToFirebase(const String &mac, const String &ip,
                               unsigned long firstBoot, unsigned long lastBoot,
                               unsigned long bootCount, const String &firmwareVersion,
                               const String &status) {
-    if (!user_auth.isAuthenticated()) {
+    if (!Firebase.ready()) {
         Serial.println("Firebase não pronto - DeviceInfo não enviado");
         return false;
     }
+    
     String path = "/dispositivos/" + deviceId + "/info";
     FirebaseJson json;
     json.set("mac", mac);
@@ -284,5 +290,6 @@ bool sendDeviceInfoToFirebase(const String &mac, const String &ip,
     json.set("firmwareVersion", firmwareVersion);
     json.set("status", status);
     json.set("lastUpdate", getTimestamp());
+    
     return sendDataToFirebase(path, json);
 }

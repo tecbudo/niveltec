@@ -34,6 +34,23 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .btn-calib {
+      background-color: #7c3aed;
+      transition: background-color 0.2s;
+    }
+    .btn-calib:hover {
+      background-color: #6d28d9;
+    }
+    .btn-calib:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status-calib {
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
   </style>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
@@ -103,7 +120,7 @@
             </div>
             <div>
               <label class="block text-gray-700 font-medium mb-1">Número de amostras por medição</label>
-              <input type="number" id="amostrasMedia" min="1" max="100" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+              <input type="number" id="amostrasMedia" min="1" max="200" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
               <p class="text-xs text-gray-500 mt-1">Quantas leituras serão tiradas e depois calculada a média.</p>
             </div>
             <div>
@@ -138,9 +155,49 @@
         </div>
       </div>
 
+      <!-- SEÇÃO: Calibração Geométrica -->
+      <div class="card p-5 bg-white shadow-sm mt-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-2 flex items-center">
+          <i class="fas fa-magic text-purple-600 mr-2"></i> Calibração Geométrica
+          <span id="calibStatusBadge" class="ml-3 status-calib bg-gray-200 text-gray-600">
+            <i class="fas fa-circle-notch mr-1"></i> Verificando...
+          </span>
+        </h2>
+        <p class="text-sm text-gray-600 mb-4">
+          A calibração é obrigatória antes de medir o nível d'água. Siga a ordem: <strong>1º Calibrar Base</strong>, depois <strong>2º Calibrar Nível X</strong>.
+          O dispositivo precisa estar estável durante a coleta (cerca de 10 a 15 segundos por etapa).
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <!-- Campo do valor X -->
+          <div class="md:col-span-1">
+            <label class="block text-gray-700 font-medium mb-1">Deslocamento Conhecido X (mm)</label>
+            <input type="number" step="0.1" id="valorX" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" value="29.8">
+            <p class="text-xs text-gray-500 mt-1">Distância exata entre a base e o nível de referência.</p>
+          </div>
+
+          <!-- Botões de ação -->
+          <div class="md:col-span-2 flex flex-wrap items-end gap-3">
+            <button type="button" id="btnCalibrarBase" class="btn-calib text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+              <i class="fas fa-arrow-down mr-2"></i> 1. Calibrar Base
+            </button>
+            <button type="button" id="btnCalibrarNivelX" class="btn-calib text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+              <i class="fas fa-arrow-up mr-2"></i> 2. Calibrar Nível X
+            </button>
+            <button type="button" id="btnResetarCalibracao" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+              <i class="fas fa-trash-alt mr-2"></i> Resetar
+            </button>
+          </div>
+        </div>
+
+        <!-- Feedback do status da calibração -->
+        <div id="calibFeedback" class="hidden p-3 rounded-lg text-sm"></div>
+        <span id="calibAdminMsg" class="text-sm text-gray-500 hidden"><i class="fas fa-lock mr-1"></i> Apenas administradores podem calibrar.</span>
+      </div>
+
       <!-- Botão de voltar extra -->
       <div class="mt-6 text-center">
-        <a href="index.html" class="text-blue-600 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Voltar ao Dashboard</a>
+        <a id="bottomBackToDashboard" href="index.html" class="text-blue-600 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Voltar ao Dashboard</a>
       </div>
     </div>
   </div>
@@ -182,6 +239,7 @@
     const adminOnlyMsg = document.getElementById('adminOnlyMsg');
     const saveBtn = document.getElementById('saveConfigBtn');
     const backToDashboardLink = document.getElementById('backToDashboard');
+    const bottomBackToDashboard = document.getElementById('bottomBackToDashboard');
 
     // Campos do formulário
     const intervaloInput = document.getElementById('intervaloMedicao');
@@ -189,6 +247,15 @@
     const modoEnvioSelect = document.getElementById('modoEnvio');
     const modoOperacaoSelect = document.getElementById('modoOperacao');
     const displayLigadoSelect = document.getElementById('displayLigado');
+    const valorXInput = document.getElementById('valorX');
+
+    // Elementos da calibração
+    const btnCalibrarBase = document.getElementById('btnCalibrarBase');
+    const btnCalibrarNivelX = document.getElementById('btnCalibrarNivelX');
+    const btnResetarCalibracao = document.getElementById('btnResetarCalibracao');
+    const calibStatusBadge = document.getElementById('calibStatusBadge');
+    const calibFeedback = document.getElementById('calibFeedback');
+    const calibAdminMsg = document.getElementById('calibAdminMsg');
 
     let currentUser = null;
     let deviceId = null;
@@ -208,7 +275,22 @@
       }, 5000);
     }
 
-    // Formatar timestamp
+    function showCalibFeedback(text, type = 'info') {
+      calibFeedback.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800', 'bg-blue-100', 'text-blue-800');
+      if (type === 'success') {
+        calibFeedback.classList.add('bg-green-100', 'text-green-800');
+      } else if (type === 'error') {
+        calibFeedback.classList.add('bg-red-100', 'text-red-800');
+      } else {
+        calibFeedback.classList.add('bg-blue-100', 'text-blue-800');
+      }
+      calibFeedback.textContent = text;
+      calibFeedback.classList.remove('hidden');
+      setTimeout(() => {
+        calibFeedback.classList.add('hidden');
+      }, 12000);
+    }
+
     function formatTimestamp(timestamp) {
       if (!timestamp || timestamp <= 0) return '--';
       const date = new Date(timestamp);
@@ -216,10 +298,19 @@
       return date.toLocaleString('pt-BR');
     }
 
-    // Carregar informações do dispositivo (info e config)
+    // Atualiza o badge de status da calibração
+    function updateCalibStatus(calibrado) {
+      if (calibrado) {
+        calibStatusBadge.className = 'ml-3 status-calib bg-green-100 text-green-800';
+        calibStatusBadge.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Calibrado';
+      } else {
+        calibStatusBadge.className = 'ml-3 status-calib bg-yellow-100 text-yellow-800';
+        calibStatusBadge.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Não Calibrado';
+      }
+    }
+
     async function loadDeviceData() {
       try {
-        // Carrega informações do nó /dispositivos/[deviceId]/info
         const infoSnapshot = await database.ref(`dispositivos/${deviceId}/info`).once('value');
         const info = infoSnapshot.val() || {};
         deviceMacSpan.textContent = info.mac || '--';
@@ -230,19 +321,23 @@
         bootCountSpan.textContent = info.bootCount !== undefined ? info.bootCount : '--';
         lastUpdateInfoSpan.textContent = formatTimestamp(info.lastUpdate);
 
-        // Carrega status
         const statusSnapshot = await database.ref(`dispositivos/${deviceId}/estado`).once('value');
         const status = statusSnapshot.val() || 'desconhecido';
         deviceStatusSpan.textContent = status;
 
-        // Carrega configuração atual
         const configSnapshot = await database.ref(`dispositivos/${deviceId}/config`).once('value');
         const config = configSnapshot.val() || {};
         intervaloInput.value = config.intervaloMedicao !== undefined ? config.intervaloMedicao : 600;
-        amostrasInput.value = config.amostrasMedia !== undefined ? config.amostrasMedia : 5;
+        amostrasInput.value = config.amostrasMedia !== undefined ? config.amostrasMedia : 50;
         modoEnvioSelect.value = config.modoEnvio || 'ambos';
         modoOperacaoSelect.value = config.modoOperacao || 'sempreAtivo';
         displayLigadoSelect.value = config.displayLigado !== undefined ? String(config.displayLigado) : 'true';
+        valorXInput.value = config.valorX !== undefined ? config.valorX : 29.8;
+
+        // Verifica o status da calibração
+        const calibSnapshot = await database.ref(`dispositivos/${deviceId}/calibracao`).once('value');
+        const calib = calibSnapshot.val() || {};
+        updateCalibStatus(calib.calibrado === true);
 
       } catch (err) {
         console.error('Erro ao carregar dados do dispositivo:', err);
@@ -250,7 +345,6 @@
       }
     }
 
-    // Carregar apelido do dispositivo (da lista do usuário)
     async function loadDeviceNickname() {
       if (!currentUser) return;
       const snapshot = await database.ref(`users/${currentUser.uid}/dispositivos/${deviceId}/apelido`).once('value');
@@ -258,7 +352,6 @@
       deviceNicknameSpan.textContent = nickname;
     }
 
-    // Verificar se o usuário atual é administrador
     async function checkAdmin() {
       if (!currentUser) return false;
       const snapshot = await database.ref(`admins/${currentUser.uid}`).once('value');
@@ -267,27 +360,34 @@
         adminBadge.classList.remove('hidden');
         saveBtn.disabled = false;
         adminOnlyMsg.classList.add('hidden');
-        // Habilita todos os campos do formulário
         intervaloInput.disabled = false;
         amostrasInput.disabled = false;
         modoEnvioSelect.disabled = false;
         modoOperacaoSelect.disabled = false;
         displayLigadoSelect.disabled = false;
+        valorXInput.disabled = false;
+        btnCalibrarBase.disabled = false;
+        btnCalibrarNivelX.disabled = false;
+        btnResetarCalibracao.disabled = false;
+        calibAdminMsg.classList.add('hidden');
       } else {
         adminBadge.classList.add('hidden');
         saveBtn.disabled = true;
         adminOnlyMsg.classList.remove('hidden');
-        // Desabilita campos
         intervaloInput.disabled = true;
         amostrasInput.disabled = true;
         modoEnvioSelect.disabled = true;
         modoOperacaoSelect.disabled = true;
         displayLigadoSelect.disabled = true;
+        valorXInput.disabled = true;
+        btnCalibrarBase.disabled = true;
+        btnCalibrarNivelX.disabled = true;
+        btnResetarCalibracao.disabled = true;
+        calibAdminMsg.classList.remove('hidden');
       }
       return isAdmin;
     }
 
-    // Salvar configuração (apenas admin)
     async function saveConfig() {
       if (!isAdmin) {
         showMessage('Você não tem permissão para editar configurações.', true);
@@ -298,31 +398,121 @@
         amostrasMedia: parseInt(amostrasInput.value, 10),
         modoEnvio: modoEnvioSelect.value,
         modoOperacao: modoOperacaoSelect.value,
-        displayLigado: displayLigadoSelect.value === 'true'
+        displayLigado: displayLigadoSelect.value === 'true',
+        valorX: parseFloat(valorXInput.value)
       };
-      // Validações básicas
       if (newConfig.intervaloMedicao < 10) newConfig.intervaloMedicao = 10;
       if (newConfig.intervaloMedicao > 86400) newConfig.intervaloMedicao = 86400;
       if (newConfig.amostrasMedia < 1) newConfig.amostrasMedia = 1;
-      if (newConfig.amostrasMedia > 100) newConfig.amostrasMedia = 100;
+      if (newConfig.amostrasMedia > 200) newConfig.amostrasMedia = 200;
+      if (isNaN(newConfig.valorX) || newConfig.valorX <= 0) newConfig.valorX = 29.8;
 
       saveBtn.disabled = true;
       saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Salvando...';
       try {
         await database.ref(`dispositivos/${deviceId}/config`).set(newConfig);
         showMessage('Configurações salvas com sucesso!', false);
-        // Recarrega para garantir consistência
         await loadDeviceData();
       } catch (err) {
         console.error('Erro ao salvar configuração:', err);
         showMessage('Erro ao salvar configuração: ' + err.message, true);
       } finally {
-        saveBtn.disabled = !isAdmin; // só habilita se admin
+        saveBtn.disabled = !isAdmin;
         saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Salvar Alterações';
       }
     }
 
-    // Inicialização após autenticação
+    // ==================== FUNÇÕES DE CALIBRAÇÃO ====================
+
+    function setCalibButtonsLoading(isLoading, action = "") {
+      if (!isAdmin) return;
+
+      btnCalibrarBase.disabled = isLoading;
+      btnCalibrarNivelX.disabled = isLoading;
+      btnResetarCalibracao.disabled = isLoading;
+
+      if (isLoading) {
+        if (action === 'base') btnCalibrarBase.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Coletando...';
+        if (action === 'nivel_x') btnCalibrarNivelX.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Coletando...';
+        if (action === 'reset') btnResetarCalibracao.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Resetando...';
+      } else {
+        btnCalibrarBase.innerHTML = '<i class="fas fa-arrow-down mr-2"></i> 1. Calibrar Base';
+        btnCalibrarNivelX.innerHTML = '<i class="fas fa-arrow-up mr-2"></i> 2. Calibrar Nível X';
+        btnResetarCalibracao.innerHTML = '<i class="fas fa-trash-alt mr-2"></i> Resetar';
+      }
+    }
+
+    async function enviarComandoCalibracao(comando, valorX = null) {
+      if (!isAdmin) {
+        showCalibFeedback('Apenas administradores podem calibrar.', 'error');
+        return;
+      }
+
+      setCalibButtonsLoading(true, comando);
+      showCalibFeedback('Aguardando o dispositivo coletar os dados (aprox. 10 segundos)...', 'info');
+
+      try {
+        if (comando === 'nivel_x' && valorX !== null) {
+          if (isNaN(valorX) || valorX <= 0) {
+            showCalibFeedback('Valor de X inválido. Digite um número positivo.', 'error');
+            setCalibButtonsLoading(false);
+            return;
+          }
+          await database.ref(`dispositivos/${deviceId}/config/valorX`).set(valorX);
+        }
+
+        await database.ref(`dispositivos/${deviceId}/comando_calibracao`).set(comando);
+
+        // Aguarda 12 segundos para o ESP32 fazer a coleta e enviar o retorno
+        setTimeout(async () => {
+          setCalibButtonsLoading(false);
+          await loadDeviceData();
+
+          const calibSnapshot = await database.ref(`dispositivos/${deviceId}/calibracao/calibrado`).once('value');
+          const isCalibrado = calibSnapshot.val() === true;
+
+          if (comando === 'reset') {
+             showCalibFeedback('Calibração apagada com sucesso.', 'success');
+          } else if (isCalibrado) {
+             showCalibFeedback('Calibração concluída com sucesso! O sistema já está calculando o Nível Y.', 'success');
+          } else {
+             showCalibFeedback('A calibração terminou, mas o sistema ainda não reportou como calibrado. Verifique a Serial.', 'error');
+          }
+        }, 12000);
+
+      } catch (err) {
+        console.error('Erro:', err);
+        setCalibButtonsLoading(false);
+        showCalibFeedback('Erro ao enviar comando: ' + err.message, 'error');
+      }
+    }
+
+    // --- EVENTOS DOS BOTÕES DE CALIBRAÇÃO ---
+    btnCalibrarBase.addEventListener('click', () => {
+      if (confirm('Posicione o sensor na BASE (Nível 0).\n\nO dispositivo coletará amostras por 10 segundos. Mantenha estável!')) {
+        enviarComandoCalibracao('base');
+      }
+    });
+
+    btnCalibrarNivelX.addEventListener('click', () => {
+      const valorX = parseFloat(valorXInput.value);
+      if (isNaN(valorX) || valorX <= 0) {
+        showCalibFeedback('Digite um valor de X válido antes de calibrar.', 'error');
+        return;
+      }
+      if (confirm(`Posicione o sensor no NÍVEL CONHECIDO X = ${valorX} mm.\n\nO dispositivo coletará amostras por 10 segundos. Mantenha estável!`)) {
+        enviarComandoCalibracao('nivel_x', valorX);
+      }
+    });
+
+    btnResetarCalibracao.addEventListener('click', () => {
+      if (confirm('Tem certeza que deseja APAGAR a calibração atual?\n\nVocê precisará recalibrar do zero.')) {
+        enviarComandoCalibracao('reset');
+      }
+    });
+
+    // ==================== INICIALIZAÇÃO ====================
+
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
         window.location.href = 'login.html';
@@ -338,18 +528,23 @@
       }
       deviceIdDisplay.textContent = `ID: ${deviceId}`;
       deviceCodeSpan.textContent = deviceId;
+      
+      // CORREÇÃO DOS LINKS DO DASHBOARD
       backToDashboardLink.href = `index.html?device=${deviceId}`;
+      bottomBackToDashboard.href = `index.html?device=${deviceId}`;
 
-      // Carregar dados e verificar permissões
       await loadDeviceNickname();
       await loadDeviceData();
       await checkAdmin();
+
+      // Listener em tempo real para o status da calibração
+      database.ref(`dispositivos/${deviceId}/calibracao/calibrado`).on('value', (snapshot) => {
+        updateCalibStatus(snapshot.val() === true);
+      });
     });
 
-    // Evento de salvar
     saveBtn.addEventListener('click', saveConfig);
 
-    // Logout
     document.getElementById('logoutBtn').addEventListener('click', () => {
       auth.signOut().then(() => window.location.href = 'login.html');
     });
