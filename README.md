@@ -727,8 +727,7 @@ Além do monitoramento de tanques evaporimétricos, a arquitetura modular e a pr
 
 ## 12. Agradecimentos
 
-Os autores expressam seus sinceros agradecimentos ao **Instituto Federal de Sergipe (IFS)**, em especial à **Pró-Reitoria de Pesquisa e Extensão (PROPEX)**, pelo apoio institucional e fomento a este projeto. Agradecemos também à Fundação de Apoio à Pesquisa e à Inovação Tecnológica do Estado de Sergipe (**FAPITEC**), por meio do Edital 25/2024/DPP/PROPEX/IFS (PIBIC Graduação), cujo incentivo foi fundamental para o desenvolvimento, execução e conclusão deste trabalho.
-
+Os autores expressam seus sinceros agradecimentos ao Instituto Federal de Sergipe (IFS), em especial à Pró-Reitoria de Pesquisa e Extensão (PROPEX), pelo apoio institucional concedido. Agradecem também  aos estudantes Gyovanna Luiza Menezes Santos Freire, Nicole Beatriz Santana Santos e Luís Vítor Santos Fontes pela valiosa colaboração no desenvolvimento deste trabalho.
 ---
 **Data da última atualização:** 14 de novembro de 2026  
 **Versão do firmware:** 1.0.0  
