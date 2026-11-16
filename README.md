@@ -2,7 +2,13 @@
 
 ## 1. Introdução
 
-O projeto **NivelTec** consiste em um sistema embarcado para monitoramento contínuo do nível de água em tanques evaporimétricos utilizando sensores laser de distância (VL53L0X). Os dados são processados localmente (Filtro de Mediana e Filtro de Kalman), enviados para um banco de dados em tempo real (Firebase Realtime Database) e disponibilizados em uma aplicação web responsiva. O sistema foi desenvolvido para operar com baixo consumo de energia, utilizando um ESP32-S2 Mini, display OLED, botão local, LED de status e modo de hibernação (deep sleep) configurável.
+A gestão eficiente dos recursos hídricos é um dos maiores desafios da atualidade, especialmente em regiões semiáridas, onde as altas temperaturas intensificam a evaporação. No contexto da agricultura e da piscicultura, essa perda representa um fator crítico: a primeira demanda um planejamento rigoroso de irrigação, enquanto a segunda exige a estabilidade do volume e da qualidade da água para a sobrevivência dos peixes. O método padrão para mensurar essa evaporação é o Tanque Evaporimétrico Classe A. Contudo, o monitoramento manual desse dispositivo apresenta sérias limitações, como a necessidade de leituras diárias, a suscetibilidade a erros humanos e o alto custo de mão de obra contínua.
+
+Embora existam sensores eletrônicos comerciais (como radares e transdutores de pressão) capazes de automatizar o processo, seu custo elevado inviabiliza a adoção em larga escala, especialmente na agricultura familiar. Nesse cenário, o projeto NivelTec propõe uma solução de Internet das Coisas (IoT) de baixo custo, utilizando o microcontrolador ESP32-S2 Mini e sensores ópticos de tempo de voo (ToF) VL53L0X.
+
+Para superar as limitações inerentes aos sensores de baixo custo (ruídos e baixa precisão milimétrica), o firmware foi dotado de uma arquitetura matemática robusta. O sistema aplica um Filtro de Mediana para rejeitar picos de ruído, realiza uma Calibração Geométrica por semelhança de triângulos (anulando diferenças físicas de montagem entre os dois sensores) e executa a Fusão de Dados (Filtro de Kalman). Essa combinação garante a extração de medições com incerteza na casa dos décimos de milímetro, utilizando hardware acessível.
+
+Por fim, todo o processamento local é integrado a uma plataforma em nuvem (Firebase). Os dados são enviados de forma segura e, em caso de falha de conexão, são armazenados localmente (LittleFS) para não haver perda de histórico. A interface de controle é uma aplicação web responsiva que permite ao usuário visualizar a evolução do nível em tempo real, acompanhar as incertezas estatísticas, configurar o hardware remotamente e executar a calibração à distância, tudo isso com foco em baixo consumo de energia (Deep Sleep) para operação prolongada em campo.
 
 ---
 
@@ -67,14 +73,14 @@ graph TB
 
 ### 4.1 Hardware e Pinos
 
-| Componente        | Pino(s)                  | Descrição                               |
-|-------------------|--------------------------|-----------------------------------------|
-| LED de status     | GPIO15                   | Indica estado de conexão                |
-| Botão local       | GPIO0                    | Liga/desliga display (pull‑up interno)  |
-| I2C (SDA/SCL)     | GPIO33, GPIO35           | Comunicação com sensores e display      |
-| XSHUT Sensor 1    | GPIO39                   | Reset do primeiro VL53L0X (Endereço 0x30)|
-| XSHUT Sensor 2    | GPIO37                   | Reset do segundo VL53L0X (Endereço 0x31)|
-| Display OLED      | I2C (0x3C)               | SSD1306, 128×64                         |
+| Componente     | Pino(s)        | Descrição                                 |
+| -------------- | -------------- | ----------------------------------------- |
+| LED de status  | GPIO15         | Indica estado de conexão                  |
+| Botão local    | GPIO0          | Liga/desliga display (pull‑up interno)    |
+| I2C (SDA/SCL)  | GPIO33, GPIO35 | Comunicação com sensores e display        |
+| XSHUT Sensor 1 | GPIO39         | Reset do primeiro VL53L0X (Endereço 0x30) |
+| XSHUT Sensor 2 | GPIO37         | Reset do segundo VL53L0X (Endereço 0x31)  |
+| Display OLED   | I2C (0x3C)     | SSD1306, 128×64                           |
 
 ### 4.2 Principais Funcionalidades
 
@@ -94,24 +100,23 @@ graph TB
 
 ### 4.3 Bibliotecas Utilizadas
 
-| Biblioteca                     | Finalidade                                |
-|--------------------------------|-------------------------------------------|
-| `WiFiManager` (2.0.17)         | Configuração Wi‑Fi com portal captivo     |
-| `Firebase_ESP_Client` (4.4.0)  | Comunicação com Firebase Realtime DB      |
-| `NTPClient` (3.2.0)            | Sincronização de horário                  |
-| `Adafruit_VL53L0X` (1.3.0)     | Leitura dos sensores laser                |
-| `Adafruit_SSD1306` (2.5.13)    | Controle do display OLED                  |
-| `Preferences` (embutida)       | Armazenamento persistente de configurações|
-| `LittleFS` (embutida)          | Sistema de arquivos para dados pendentes  |
-| `ArduinoJson` (6.21.5)         | Manipulação de JSON para pendentes        |
-| `CRC32` (opcional)             | Cálculo do CRC‑32 para geração do deviceId|
+| Biblioteca                    | Finalidade                                 |
+| ----------------------------- | ------------------------------------------ |
+| `WiFiManager` (2.0.17)        | Configuração Wi‑Fi com portal captivo      |
+| `Firebase_ESP_Client` (4.4.0) | Comunicação com Firebase Realtime DB       |
+| `NTPClient` (3.2.0)           | Sincronização de horário                   |
+| `Adafruit_VL53L0X` (1.3.0)    | Leitura dos sensores laser                 |
+| `Adafruit_SSD1306` (2.5.13)   | Controle do display OLED                   |
+| `Preferences` (embutida)      | Armazenamento persistente de configurações |
+| `LittleFS` (embutida)         | Sistema de arquivos para dados pendentes   |
+| `ArduinoJson` (6.21.5)        | Manipulação de JSON para pendentes         |
+| `CRC32` (opcional)            | Cálculo do CRC‑32 para geração do deviceId |
 
-
-## 4.4. Arquitetura de Software: FreeRTOS, Tarefas e a Máquina de Estados
+### 4.4. Arquitetura de Software: FreeRTOS, Tarefas e a Máquina de Estados
 
 Esta seção detalha como o firmware do NivelTec foi organizado internamente. O objetivo é permitir que qualquer estudante ou desenvolvedor compreenda a lógica do sistema ao abrir o código. O firmware **não utiliza a programação linear tradicional** (onde o `loop()` executa tudo em sequência), mas sim uma arquitetura baseada em **Sistema Operacional de Tempo Real (FreeRTOS)**.
 
-### 4.4.1. O Paradigma FreeRTOS e o `loop()` Vazio
+#### 4.4.1. O Paradigma FreeRTOS e o `loop()` Vazio
 
 Na programação Arduino tradicional, o `setup()` configura o hardware e o `loop()` executa a lógica principal em um ciclo infinito. Se uma rotina demorar muito (ex: ler o sensor por 5 segundos), todo o sistema "congela" e a comunicação Wi-Fi ou o display param de responder.
 
@@ -125,22 +130,22 @@ void loop() {
 
 Toda a inteligência do sistema foi movida para o `setup()`, que, logo ao final, **cria as tarefas (Tasks)** do FreeRTOS. A partir daí, a biblioteca do FreeRTOS assume o controle do processador. Ela age como um "maestro" (escalonador ou *Scheduler*), decidindo qual tarefa deve rodar em cada milissegundo, garantindo que todas avancem em paralelo sem que uma trave as outras.
 
-### 4.4.2. As Tarefas (Tasks) do Sistema
+#### 4.4.2. As Tarefas (Tasks) do Sistema
 
 Foram criadas seis tarefas independentes no `setup()` via `xTaskCreate`:
 
-| Tarefa | Prioridade | Ciclo de Execução | Responsabilidade |
-| :--- | :--- | :--- | :--- |
-| **`tarefaComunicacao`** | 2 | 5 segundos | Lê o Firebase (configurações e comandos) e aplica no sistema. |
-| **`tarefaMedicao`** | 1 | Contínuo (50 ms) | Gerencia a Máquina de Estados de coleta e processamento dos sensores. |
-| **`tarefaDisplay`** | 1 | 1 segundo | Atualiza os dados na tela OLED. |
-| **`tarefaBotao`** | 1 | 50 ms | Faz o *debounce* e lê o botão físico (liga/desliga display). |
-| **`tarefaLED`** | 1 | Variável | Pisca o LED indicando estado da conexão. |
-| **`tarefaVerificaConexao`** | 1 | 2 segundos | Monitora a reconexão e dispara o reenvio de dados pendentes. |
+| Tarefa                      | Prioridade | Ciclo de Execução | Responsabilidade                                                      |
+|:--------------------------- |:---------- |:----------------- |:--------------------------------------------------------------------- |
+| **`tarefaComunicacao`**     | 2          | 5 segundos        | Lê o Firebase (configurações e comandos) e aplica no sistema.         |
+| **`tarefaMedicao`**         | 1          | Contínuo (50 ms)  | Gerencia a Máquina de Estados de coleta e processamento dos sensores. |
+| **`tarefaDisplay`**         | 1          | 1 segundo         | Atualiza os dados na tela OLED.                                       |
+| **`tarefaBotao`**           | 1          | 50 ms             | Faz o *debounce* e lê o botão físico (liga/desliga display).          |
+| **`tarefaLED`**             | 1          | Variável          | Pisca o LED indicando estado da conexão.                              |
+| **`tarefaVerificaConexao`** | 1          | 2 segundos        | Monitora a reconexão e dispara o reenvio de dados pendentes.          |
 
-Cada tarefa possui um `vTaskDelay()` interno. Isso é crucial: ao executar essa função, a tarefa avisa ao FreeRTOS que está "pausada", liberando o processador para as outras tarefas rodarem. É por isso que a `tarefaMedicao` consegue esperar 250 ms entre amostras sem travar o sistema.
+Cada tarefa possui um `vTaskDelay()` interno. Isso é necessario: ao executar essa função, a tarefa avisa ao FreeRTOS que está "pausada", liberando o processador para as outras tarefas rodarem. É por isso que a `tarefaMedicao` consegue esperar 250 ms entre amostras sem travar o sistema.
 
-### 4.4.3. A Máquina de Estados da Medição
+#### 4.4.3. A Máquina de Estados da Medição
 
 A `tarefaMedicao` é o coração do firmware. Para não travar o sistema enquanto coleta 50 amostras (o que levaria vários segundos), ela foi estruturada como uma **Máquina de Estados** não-bloqueante.
 
@@ -158,12 +163,12 @@ stateDiagram-v2
     [*] --> IDLE : Sistema Inicializado
 
     IDLE --> MEDINDO : Tempo do intervalo atingido
-    IDLE --> COLETANDO_BASE : Comando "base" recebido
-    IDLE --> COLETANDO_NIVEL_X : Comando "nivel_x" recebido
+    IDLE --> COLETANDO_BASE : Comando base recebido
+    IDLE --> COLETANDO_NIVEL_X : Comando nivel_x recebido
 
-    COLETANDO_BASE --> IDLE : 50 amostras coletadas\n(Envia status ao site)
-    COLETANDO_NIVEL_X --> IDLE : 50 amostras coletadas\n(Envia status ao site)
-    MEDINDO --> IDLE : 50 amostras coletadas\n(Envia dados via MQTT/Firebase)
+    COLETANDO_BASE --> IDLE : 50 amostras coletadas<br>(Envia status ao site)
+    COLETANDO_NIVEL_X --> IDLE : 50 amostras coletadas<br>(Envia status ao site)
+    MEDINDO --> IDLE : 50 amostras coletadas<br>(Envia dados via MQTT/Firebase)
 
     note right of IDLE
         Aguarda comando do Firebase
@@ -174,7 +179,7 @@ stateDiagram-v2
 **Como funciona a coleta dentro do estado ativo?**
 Em cada ciclo da máquina (a cada 50 ms), a função `lerMedianaSensores()` executa 5 leituras rápidas, extrai a mediana (descartando ruídos) e incrementa um contador (`amostrasColetadas`). Quando o contador atinge 50, o ESP32 calcula a média, o desvio padrão e transita de volta para `IDLE`.
 
-### 4.4.4. Os Mutexes (Semáforos de Exclusão Mútua)
+#### 4.4.4. Os Mutexes (Semáforos de Exclusão Mútua)
 
 Como o FreeRTOS permite que tarefas "pareçam" rodar ao mesmo tempo, existe um risco grave: **duas tarefas tentarem acessar o mesmo periférico simultaneamente**. Por exemplo, a `tarefaMedicao` tentar ler o sensor I2C enquanto a `tarefaDisplay` tenta desenhar na tela OLED (que também usa I2C). Isso causaria colisão de dados e travamento.
 
@@ -184,7 +189,7 @@ Para evitar isso, usamos três **Mutexes** (MUTual EXclusion - Exclusão Mútua)
 2. **`xConfigMutex`**: Protege a estrutura `configAtual`. Impede que a `tarefaComunicacao` altere o intervalo de medição no exato momento em que a `tarefaMedicao` está lendo esse valor.
 3. **`xPendentesMutex`**: Protege o arquivo `/pendentes.json` no LittleFS. Impede que duas tarefas tentem escrever ou ler o arquivo ao mesmo tempo.
 
-### 4.4.5. Resumo Visual da Orquestração
+#### 4.4.5. Resumo Visual da Orquestração
 
 O diagrama abaixo mostra como todas as peças se encaixam em um ciclo de vida completo:
 
@@ -229,6 +234,7 @@ flowchart TD
 ```
 
 O `loop()` vazio na parte inferior do código é a prova de que o sistema foi delegado ao FreeRTOS: a partir do momento em que as tarefas são criadas no `setup()`, o escalonador do sistema operacional assume o controle, alternando entre as tarefas de forma preemptiva (por prioridade) e cooperativa (por meio dos `vTaskDelay`), garantindo o funcionamento simultâneo, seguro e contínuo do monitoramento.
+
 ---
 
 ## 5. Banco de Dados (Firebase Realtime Database)
@@ -344,6 +350,7 @@ O `loop()` vazio na parte inferior do código é a prova de que o sistema foi de
 ```
 
 **Explicação das regras**:
+
 - Cada usuário só pode ler/escrever seus próprios dados no nó `users`.
 - Qualquer usuário autenticado pode ler informações básicas dos dispositivos e criar novas medições.
 - Apenas administradores (UID listados em `admins`) podem alterar a configuração (`config`) e enviar comandos de calibração (`comando_calibracao`).
@@ -508,16 +515,16 @@ sequenceDiagram
 
 ### 7.1 Estrutura de Páginas
 
-| Página                | Rota               | Funcionalidade                                                                 |
-|-----------------------|--------------------|--------------------------------------------------------------------------------|
-| Login                 | `login.html`       | Autenticação com email/senha ou Google; tratamento de parâmetro `?device=`      |
-| Cadastro              | `cadastro.html`    | Criação de nova conta; associação automática de dispositivo, se presente       |
-| Adicionar Dispositivo | `cadastro-dispositivo.html` | Leitura de código (digitação ou QR Code) e associação ao usuário         |
-| Meus Dispositivos     | `dispositivos.html`| Lista todos os dispositivos do usuário; permite renomear, remover e acessar    |
-| Dashboard             | `index.html`       | **Simplificado:** Exibe apenas o Nível d'água (`y_fusao`) e a incerteza (`sigma_y`) no formato `30,1(5)`. Alerta se não estiver calibrado. |
-| Tabela e Gráficos     | `tabela.html`      | Histórico completo. Gráfico com área de incerteza sombreada. Tabela com formato científico. Botão de apagar histórico (admin). |
-| Configurações         | `configuracoes.html`| Edita parâmetros (admin) e possui a interface de **Calibração Remota** com botões e feedback visual. |
-| Gerar QR Code         | `gerarqrcode.html` | Ferramenta administrativa para gerar etiquetas físicas com QR Code para associar o hardware. |
+| Página                | Rota                        | Funcionalidade                                                                                                                             |
+| --------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Login                 | `login.html`                | Autenticação com email/senha ou Google; tratamento de parâmetro `?device=`                                                                 |
+| Cadastro              | `cadastro.html`             | Criação de nova conta; associação automática de dispositivo, se presente                                                                   |
+| Adicionar Dispositivo | `cadastro-dispositivo.html` | Leitura de código (digitação ou QR Code) e associação ao usuário                                                                           |
+| Meus Dispositivos     | `dispositivos.html`         | Lista todos os dispositivos do usuário; permite renomear, remover e acessar                                                                |
+| Dashboard             | `index.html`                | **Simplificado:** Exibe apenas o Nível d'água (`y_fusao`) e a incerteza (`sigma_y`) no formato `30,1(5)`. Alerta se não estiver calibrado. |
+| Tabela e Gráficos     | `tabela.html`               | Histórico completo. Gráfico com área de incerteza sombreada. Tabela com formato científico. Botão de apagar histórico (admin).             |
+| Configurações         | `configuracoes.html`        | Edita parâmetros (admin) e possui a interface de **Calibração Remota** com botões e feedback visual.                                       |
+| Gerar QR Code         | `gerarqrcode.html`          | Ferramenta administrativa para gerar etiquetas físicas com QR Code para associar o hardware.                                               |
 
 ### 7.2 Funcionalidades Comuns
 
@@ -536,7 +543,7 @@ sequenceDiagram
 
 ---
 
-## 8. Diagrama de Classes 
+## 8. Diagrama de Classes
 
 ```mermaid
 classDiagram
@@ -632,6 +639,7 @@ classDiagram
 ### 9.1 Uso do WiFiManager Padrão
 
 Optou-se pelo `WiFiManager` tradicional (síncrono) em vez da versão assíncrona devido a:
+
 - **Menor complexidade de instalação** – todas as dependências estão disponíveis no Library Manager.
 - **Consumo de recursos** – a versão síncrona consome menos flash e RAM, deixando mais espaço para o código de aplicação e para futuras implementações como OTA.
 - **Confiabilidade** – funciona de forma estável no ESP32-S2.
@@ -640,6 +648,7 @@ Optou-se pelo `WiFiManager` tradicional (síncrono) em vez da versão assíncron
 ### 9.2 Geração do DeviceId
 
 O identificador do dispositivo é gerado a partir do MAC via CRC‑32 (32 bits) + 4 bits de paridade (XOR dos bytes do CRC). Resultado: 9 caracteres hex. Vantagens:
+
 - Ofusca o MAC original (não exposto no banco).
 - Permite detecção de erros de digitação no frontend.
 - Determinístico (mesmo ID para o mesmo hardware).
@@ -713,6 +722,12 @@ O projeto NivelTec atendeu plenamente aos requisitos de monitoramento remoto com
 Durante os testes, constatou-se que o comprimento de onda do laser é fortemente absorvido pela água, exigindo o uso de uma superfície flutuante. Contudo, reconhece-se que o flutuador pode interferir levemente na taxa de evaporação (barreira física ao ar), uma variável a ser estudada na V2.0, onde o conjunto será isolado em um tubo preto.
 
 Além do monitoramento de tanques evaporimétricos, a arquitetura modular e a precisão alcançada demonstram que o produto tem **forte potencial de aplicação comercial em outras áreas** que exigem medição de nível de alta precisão, como silos de grãos na agricultura, reservatórios industriais e monitoramento de marés.
+
+---
+
+## 12. Agradecimentos
+
+Os autores expressam seus sinceros agradecimentos ao **Instituto Federal de Sergipe (IFS)**, em especial à **Pró-Reitoria de Pesquisa e Extensão (PROPEX)**, pelo apoio institucional e fomento a este projeto. Agradecemos também à Fundação de Apoio à Pesquisa e à Inovação Tecnológica do Estado de Sergipe (**FAPITEC**), por meio do Edital 25/2024/DPP/PROPEX/IFS (PIBIC Graduação), cujo incentivo foi fundamental para o desenvolvimento, execução e conclusão deste trabalho.
 
 ---
 **Data da última atualização:** 14 de novembro de 2026  
