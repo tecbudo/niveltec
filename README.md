@@ -1,5 +1,12 @@
 # Documentação do Projeto NivelTec – Monitoramento de Nível de Água (V1.0)
 
+### Equipe:
+* Prof. João Batista dos Santos Filho
+* Prof. Alan Vinícios Santos Sá
+* Gyovanna Luiza Menezes Santos Freire
+* Nicole Beatriz Santana Santos
+* Luís Vítor Santos Fontes 
+
 ## 1. Introdução
 
 A gestão eficiente dos recursos hídricos é um dos maiores desafios da atualidade, especialmente em regiões semiáridas, onde as altas temperaturas intensificam a evaporação. No contexto da agricultura e da piscicultura, essa perda representa um fator crítico: a primeira demanda um planejamento rigoroso de irrigação, enquanto a segunda exige a estabilidade do volume e da qualidade da água para a sobrevivência dos peixes. O método padrão para mensurar essa evaporação é o Tanque Evaporimétrico Classe A. Contudo, o monitoramento manual desse dispositivo apresenta sérias limitações, como a necessidade de leituras diárias, a suscetibilidade a erros humanos e o alto custo de mão de obra contínua.
@@ -727,7 +734,7 @@ Além do monitoramento de tanques evaporimétricos, a arquitetura modular e a pr
 
 ## 12. Agradecimentos
 
-Os autores expressam seus sinceros agradecimentos ao Instituto Federal de Sergipe (IFS), em especial à Pró-Reitoria de Pesquisa e Extensão (PROPEX), pelo apoio institucional concedido. Agradecem também  aos estudantes Gyovanna Luiza Menezes Santos Freire, Nicole Beatriz Santana Santos e Luís Vítor Santos Fontes pela valiosa colaboração no desenvolvimento deste trabalho.
+Os autores expressam seus sinceros agradecimentos ao Instituto Federal de Sergipe (IFS), em especial à Pró-Reitoria de Pesquisa e Extensão (PROPEX), pelo apoio institucional concedido.
 ---
 **Data da última atualização:** 14 de novembro de 2026  
 **Versão do firmware:** 1.0.0  
